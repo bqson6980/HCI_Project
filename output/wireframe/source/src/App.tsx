@@ -5,14 +5,14 @@ type Screen =
   | 'overview'
   | 'ticket'
   | 'floormap'
-  | 'cameraview'
+  | 'checkposition'
   | 'payment'
 
 const SCREENS: { id: Screen; label: string }[] = [
   { id: 'overview', label: '1. Tổng quan' },
   { id: 'ticket', label: '2. Nhận thẻ' },
   { id: 'floormap', label: '3. Sơ đồ tầng' },
-  { id: 'cameraview', label: '4. Camera rời xe' },
+  { id: 'checkposition', label: '4. Vị trí xe đỗ' },
   { id: 'payment', label: '5. Thanh toán' },
 ]
 
@@ -231,58 +231,55 @@ function FloorMapScreen() {
   )
 }
 
-// ─── Screen 4: Camera rời xe ──────────────────────────────────────────────────
+// ─── Screen 4: Thông báo vị trí xe đỗ ────────────────────────────────────────
 
-function CameraViewScreen() {
+function CheckPositionScreen() {
   return (
     <div>
-      <ScreenTitle>Thông báo rời xe đỗ — Camera</ScreenTitle>
+      <ScreenTitle>Màn hình thông báo vị trí xe đỗ</ScreenTitle>
 
       <Box className="p-3">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 mb-4">
           {/* A */}
-          <div>
-            <Label className="mb-1 block">Khu A</Label>
-            <PlaceholderImg label="camera A" className="h-20" />
-          </div>
+          <Box className="h-24 flex items-center justify-center font-bold text-gray-700 bg-white">
+            A
+          </Box>
 
           {/* B */}
-          <div>
-            <Label className="mb-1 block">Khu B</Label>
-            <PlaceholderImg label="camera B" className="h-20" />
-          </div>
+          <Box className="h-24 flex items-center justify-center font-bold text-gray-700 bg-white">
+            B
+          </Box>
 
-          {/* C — highlighted / active */}
-          <div>
-            <Label className="mb-1 block">Khu C</Label>
-            <div className="border-2 border-gray-700 bg-gray-50 p-1.5 h-24">
-              <p className="text-[9px] text-gray-400 mb-1">[feed C]</p>
-              <div className="grid grid-cols-3 gap-0.5">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={`h-5 border text-[8px] flex items-center justify-center
-                      ${i === 3 ? 'bg-gray-700 border-gray-800 text-white' : 'bg-gray-100 border-gray-300'}`}
-                  >
-                    {i === 3 ? 'X' : ''}
-                  </div>
-                ))}
-              </div>
+          {/* C — highlighted section with 2x3 spots grid */}
+          <Box className="h-24 p-2 bg-gray-50 flex flex-col justify-between border-2 border-gray-800">
+            <div className="text-[10px] font-bold text-gray-800 text-center mb-1">C</div>
+            <div className="grid grid-cols-3 gap-1.5 flex-1">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`border flex items-center justify-center rounded-xs ${
+                    i === 4
+                      ? 'bg-emerald-500 border-emerald-700 text-white font-bold text-[9px]'
+                      : 'bg-white border-gray-400'
+                  }`}
+                >
+                  {i === 4 ? '✓' : ''}
+                </div>
+              ))}
             </div>
-          </div>
+          </Box>
 
           {/* D */}
-          <div>
-            <Label className="mb-1 block">Khu D</Label>
-            <PlaceholderImg label="camera D" className="h-24" />
-          </div>
+          <Box className="h-24 flex items-center justify-center font-bold text-gray-700 bg-white">
+            D
+          </Box>
         </div>
 
-        {/* Exit action */}
-        <div className="mt-3 flex items-center justify-end gap-2 border-t border-gray-300 pt-2">
-          <span className="text-[10px] text-gray-500">← Rời xe</span>
-          <div className="border-2 border-gray-600 w-8 h-8 flex items-center justify-center text-gray-700">
-            <span className="text-base">| |</span>
+        {/* Exit action button at bottom right matching sketch */}
+        <div className="flex justify-end items-center gap-2 border-t border-gray-300 pt-2">
+          <span className="text-[10px] font-semibold text-gray-600">←</span>
+          <div className="border-2 border-gray-800 bg-white px-2 py-1 text-center font-bold text-xs flex items-center gap-1 cursor-pointer hover:bg-gray-100">
+            <span>🧍</span>
           </div>
         </div>
       </Box>
@@ -384,7 +381,7 @@ export default function App() {
     overview: <OverviewScreen />,
     ticket: <TicketScreen />,
     floormap: <FloorMapScreen />,
-    cameraview: <CameraViewScreen />,
+    checkposition: <CheckPositionScreen />,
     payment: <PaymentScreen />,
   }
 

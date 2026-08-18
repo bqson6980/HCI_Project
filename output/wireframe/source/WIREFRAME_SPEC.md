@@ -43,15 +43,17 @@ Nguon doi chieu:
   - Uu tien 1: vi tri trong/da do trong tung khu.
   - Uu tien 2: tong so cho trong cua khu.
 
-## Screen 4 - Thong bao vi tri xe do
-- Muc tieu: xem nhanh feed camera theo khu va danh dau vi tri lien quan.
+## Screen 4 - Thông báo vị trí xe đỗ (Check Position)
+- Muc tieu: Hien thi vi tri xe do cua nguoi dung dua tren anh phac thao `check_position.png`.
 - Layout:
-  - Grid 2x2 cho khu A/B/C/D.
-  - Khu C la khu duoc nhan manh voi o vi tri danh dau.
-  - Footer ben phai co hanh dong roi xe.
+  - Header `Man hinh thong bao vi tri xe do`.
+  - Luoi 2x2 gom 4 khu A/B/C/D.
+  - Khu A, B, D hien thi o khung tong quan.
+  - Khu C duoc nhan manh chi tiet voi mini-grid 2x3 va 1 o vi tri duoc highlight mau xanh/tich chon (vi tri xe do).
+  - Goc duoi ben phai: bieu tuong nut `← 🧍` (Roi xe / Hoan tat).
 - Information hierarchy:
-  - Uu tien 1: feed cua khu duoc danh dau.
-  - Uu tien 2: hanh dong roi xe.
+  - Uu tien 1: vi tri xe do trong khu C được highlight.
+  - Uu tien 2: hanh dong roi xe / hoan tat.
 
 ## Screen 5 - Thanh toan
 - Muc tieu: hien thi thong tin phi va cho phep thanh toan bang the/QR.

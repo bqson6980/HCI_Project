@@ -1,0 +1,14 @@
+@import 'tailwindcss';
+
+@layer utilities {
+  .striped-pattern {
+    background-color: #f8fafc;
+    background-image: repeating-linear-gradient(
+      -45deg,
+      rgba(203, 213, 225, 0.4),
+      rgba(203, 213, 225, 0.4) 10px,
+      transparent 10px,
+      transparent 20px
+    );
+  }
+}
