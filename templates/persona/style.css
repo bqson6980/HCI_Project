@@ -1,0 +1,104 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  color: #111111;
+  background-color: #ffffff;
+  display: flex;
+  justify-content: center;
+  padding: 40px 20px;
+}
+
+.persona-container {
+  width: 100%;
+  max-width: 900px;
+  display: flex;
+  gap: 40px;
+}
+
+.left-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.right-column {
+  flex: 1.1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Header & Typography */
+.persona-name {
+  font-size: 15px;
+  font-weight: normal;
+  margin-bottom: 2px;
+}
+
+h2 {
+  font-size: 15px;
+  font-weight: bold;
+  margin-bottom: 6px;
+  color: #000000;
+}
+
+p, li, .sub-desc {
+  font-size: 13px;
+  line-height: 1.45;
+  color: #222222;
+}
+
+.sub-desc {
+  margin-bottom: 4px;
+}
+
+/* Table Style */
+.info-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.info-table td {
+  border: 1.5px solid #000000;
+  padding: 6px 10px;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.info-table td.label {
+  width: 38%;
+}
+
+.info-table td.value {
+  width: 62%;
+}
+
+/* Lists */
+ul {
+  padding-left: 18px;
+}
+
+li {
+  margin-bottom: 2px;
+}
+
+/* Sub-grid for side-by-side sections (Needs & Frustrations) */
+.sub-grid {
+  display: flex;
+  gap: 20px;
+}
+
+.sub-col {
+  flex: 1;
+}
+
+/* Quote */
+.quote-section p {
+  font-size: 13px;
+}
