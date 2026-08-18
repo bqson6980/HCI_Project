@@ -1,0 +1,9 @@
+Câu lệnh để render ra ảnh persona:
+"Hãy đọc tư liệu thô về Nguyễn Văn Duy tại data/persona/persona_nguyen_van_duy.md,
+ trích xuất thông tin chuẩn HCI rồi điền vào template tại templates/persona/index.html. 
+ Sau đó chạy script tools/render_png.py để xuất ra file ảnh output/persona.png cho tôi."
+ Chi phí:
+ Context
+35,241 tokens
+3% used
+$0.16 spent

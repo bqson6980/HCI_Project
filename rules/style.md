@@ -1,11 +1,6 @@
-Viết đoạn văn ngắn gọn, súc tích (concise paragraphs).  
-Tránh dùng emoji.  
-Trả lời bằng tiếng Việt và luôn cung cấp bản dịch tiếng Anh kèm theo.  
-Sử dụng Markdown headings.  
-Sử dụng hợp lý các yếu tố visual design.
-
-
-#Protype Require
-- giao diện trực quan, phù hợp hỗ trợ cho màn hình hiển thị lớn.
-- background phù hợp với bối cảnh
-- chú thích rõ ràng
+# Quy tắc chất lượng
+Viết các đoạn văn súc tích.
+Tránh sử dụng biểu tượng cảm xúc (emoji).
+Phản hồi bằng tiếng Việt.
+Không dùng những từ tiếng việt quá khó hiểu.
+Sử dụng các tiêu đề định dạng Markdown.
