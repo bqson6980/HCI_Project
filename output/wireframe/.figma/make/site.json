@@ -1,0 +1,10 @@
+{
+  "description": "Transforms hand-sketched PDF interfaces into simple wireframes based on planning and skills documents, facilitating design evaluation and improvement.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
