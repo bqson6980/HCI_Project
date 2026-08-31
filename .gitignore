@@ -141,3 +141,11 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Lock files (dependencies)
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Wireframe output images
+output/wireframe/res_img/
