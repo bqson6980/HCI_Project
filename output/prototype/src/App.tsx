@@ -1,18 +1,27 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 
 type Screen = 'overview' | 'ticket' | 'floormap' | 'checkposition' | 'payment'
+type CheckoutStep = 'tap_card' | 'pay' | 'success'
+type PaymentMethod = 'qr' | 'card'
+
+type FloorSummary = {
+  id: string
+  name: string
+  type: string
+  used: number
+  total: number
+  status: 'full' | 'warn' | 'ok'
+}
 
 const SCREENS: { id: Screen; label: string; sub: string }[] = [
-  { id: 'overview', label: '1. Tổng quan', sub: 'Công suất & Chỗ trống B1-B6' },
-  { id: 'ticket', label: '2. Nhận thẻ', sub: 'Vào bãi & Ghi nhận xe' },
-  { id: 'floormap', label: '3. Sơ đồ tầng B2', sub: 'Trực quan chỗ trống & Lối vào/ra' },
-  { id: 'checkposition', label: '4. Tra cứu vị trí', sub: 'Check-position bằng thẻ' },
-  { id: 'payment', label: '5. Thanh toán', sub: 'Luồng trả thẻ & Mở barie' },
+  { id: 'overview', label: '1. Tổng quan', sub: 'Công suất & chỗ trống B1-B6' },
+  { id: 'ticket', label: '2. Nhận thẻ', sub: 'Vào bãi & ghi nhận xe' },
+  { id: 'floormap', label: '3. Sơ đồ tầng', sub: 'Chọn chỗ đỗ' },
+  { id: 'checkposition', label: '4. Tra cứu vị trí', sub: 'Tìm xe bằng thẻ' },
+  { id: 'payment', label: '5. Thanh toán', sub: 'Hoàn tất & mở barie' },
 ]
 
-type FloorStatus = 'full' | 'warn' | 'ok'
-
-const FLOORS: { id: string; name: string; type: string; used: number; total: number; status: FloorStatus }[] = [
+const FLOORS: FloorSummary[] = [
   { id: 'B1', name: 'Tầng B1', type: 'Xe máy', used: 300, total: 300, status: 'full' },
   { id: 'B2', name: 'Tầng B2', type: 'Xe máy', used: 245, total: 300, status: 'warn' },
   { id: 'B3', name: 'Tầng B3', type: 'Xe máy', used: 49, total: 300, status: 'ok' },
@@ -21,19 +30,19 @@ const FLOORS: { id: string; name: string; type: string; used: number; total: num
   { id: 'B6', name: 'Tầng B6', type: 'Xe máy', used: 80, total: 300, status: 'ok' },
 ]
 
-function statusBadge(status: FloorStatus) {
+function statusBadge(status: FloorSummary['status']) {
   if (status === 'full') return { label: 'ĐẦY', bg: 'bg-rose-500 text-white border-rose-600' }
   if (status === 'warn') return { label: 'GẦN ĐẦY', bg: 'bg-amber-400 text-amber-950 border-amber-500' }
   return { label: 'CÒN TRỐNG', bg: 'bg-emerald-500 text-white border-emerald-600' }
 }
 
-function statusBarBg(status: FloorStatus) {
+function statusBarBg(status: FloorSummary['status']) {
   if (status === 'full') return 'bg-rose-500'
   if (status === 'warn') return 'bg-amber-400'
   return 'bg-emerald-500'
 }
 
-function ScreenFrame({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+function ScreenFrame({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   return (
     <section className="rounded-3xl border border-slate-200/80 bg-white/90 p-5 shadow-xl backdrop-blur-md sm:p-7">
       <div className="mb-6 border-b border-slate-200 pb-4">
@@ -51,104 +60,82 @@ function ScreenFrame({ title, subtitle, children }: { title: string; subtitle?: 
   )
 }
 
-/* =========================================================================
-   1. TỔNG QUAN CHỖ TRỐNG (OVERVIEW SCREEN)
-   ========================================================================= */
-function OverviewScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) {
-  const totalSlots = FLOORS.reduce((acc, f) => acc + f.total, 0)
-  const totalUsed = FLOORS.reduce((acc, f) => acc + f.used, 0)
+function OverviewScreen() {
+  const totalSlots = FLOORS.reduce((sum, floor) => sum + floor.total, 0)
+  const totalUsed = FLOORS.reduce((sum, floor) => sum + floor.used, 0)
   const totalFree = totalSlots - totalUsed
 
   return (
     <ScreenFrame title="Tổng quan chỗ trống gửi xe (Hầm B1 - B6)">
-      {/* Metric summary panel */}
-      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="mb-6 grid gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <p className="text-xs font-medium uppercase tracking-wider text-slate-500">Tổng sức chứa</p>
-          <p className="mt-1 text-2xl font-extrabold text-slate-900">{totalSlots.toLocaleString()} <span className="text-sm font-normal text-slate-500">chỗ</span></p>
+          <p className="mt-1 text-2xl font-extrabold text-slate-900">
+            {totalSlots.toLocaleString()} <span className="text-sm font-normal text-slate-500">chỗ</span>
+          </p>
         </div>
         <div className="rounded-2xl border border-rose-200 bg-rose-50/50 p-4">
           <p className="text-xs font-medium uppercase tracking-wider text-rose-700">Đã sử dụng</p>
-          <p className="mt-1 text-2xl font-extrabold text-rose-700">{totalUsed.toLocaleString()} <span className="text-sm font-normal text-rose-600">chỗ ({Math.round((totalUsed / totalSlots) * 100)}%)</span></p>
+          <p className="mt-1 text-2xl font-extrabold text-rose-700">
+            {totalUsed.toLocaleString()} <span className="text-sm font-normal text-rose-600">chỗ ({Math.round((totalUsed / totalSlots) * 100)}%)</span>
+          </p>
         </div>
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4">
           <p className="text-xs font-medium uppercase tracking-wider text-emerald-700">Còn trống toàn bãi</p>
-          <p className="mt-1 text-2xl font-extrabold text-emerald-700">{totalFree.toLocaleString()} <span className="text-sm font-normal text-emerald-600">chỗ khả dụng</span></p>
+          <p className="mt-1 text-2xl font-extrabold text-emerald-700">
+            {totalFree.toLocaleString()} <span className="text-sm font-normal text-emerald-600">chỗ khả dụng</span>
+          </p>
         </div>
       </div>
 
-      {/* Floors list arranged from top to bottom */}
       <div className="flex flex-col gap-3">
-        {FLOORS.map((f) => {
-          const percent = Math.round((f.used / f.total) * 100)
-          const available = f.total - f.used
-          const badge = statusBadge(f.status)
+        {FLOORS.map((floor) => {
+          const percent = Math.round((floor.used / floor.total) * 100)
+          const available = floor.total - floor.used
+          const badge = statusBadge(floor.status)
 
           return (
-            <div
-              key={f.id}
-              className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 sm:flex-row sm:items-center sm:justify-between"
-            >
-              {/* Floor Identifier */}
-              <div className="flex items-center gap-3.5 min-w-[140px]">
+            <div key={floor.id} className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-[140px] items-center gap-3.5">
                 <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-lg font-black text-white sm:h-14 sm:w-14 sm:text-xl">
-                  {f.id}
+                  {floor.id}
                 </span>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">{f.name}</h3>
-                  <p className="text-xs text-slate-500">{f.type}</p>
+                  <h3 className="text-base font-bold text-slate-900">{floor.name}</h3>
+                  <p className="text-xs text-slate-500">{floor.type}</p>
                 </div>
               </div>
 
-              {/* Progress & Occupancy Info */}
-              <div className="flex-1 max-w-lg">
+              <div className="max-w-lg flex-1">
                 <div className="mb-1.5 flex items-center justify-between text-xs">
                   <span className="font-semibold text-slate-700">
-                    Còn trống: <strong className="text-slate-900 font-bold">{available}</strong> / {f.total} chỗ
+                    Còn trống: <strong className="font-bold text-slate-900">{available}</strong> / {floor.total} chỗ
                   </span>
-                  <span className="text-slate-500 font-medium">{percent}% đã dùng</span>
+                  <span className="font-medium text-slate-500">{percent}% đã dùng</span>
                 </div>
-                <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100 border border-slate-200">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${statusBarBg(f.status)}`}
-                    style={{ width: `${percent}%` }}
-                  />
+                <div className="h-2.5 w-full overflow-hidden rounded-full border border-slate-200 bg-slate-100">
+                  <div className={`h-full rounded-full transition-all duration-500 ${statusBarBg(floor.status)}`} style={{ width: `${percent}%` }} />
                 </div>
               </div>
 
-              {/* Status Badge */}
-              <div className="flex items-center sm:justify-end min-w-[100px]">
-                <span className={`rounded-full border px-3.5 py-1 text-xs font-extrabold ${badge.bg}`}>
-                  {badge.label}
-                </span>
+              <div className="flex min-w-[150px] items-center justify-end">
+                <span className={`rounded-full border px-3.5 py-1 text-xs font-extrabold ${badge.bg}`}>{badge.label}</span>
               </div>
             </div>
           )
         })}
       </div>
 
-      {/* Legend */}
       <div className="mt-6 flex flex-wrap items-center justify-center gap-6 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-semibold text-slate-700">
-        <span className="flex items-center gap-2">
-          <span className="h-3.5 w-3.5 rounded-full bg-emerald-500" /> Còn trống (Available)
-        </span>
-        <span className="flex items-center gap-2">
-          <span className="h-3.5 w-3.5 rounded-full bg-amber-400" /> Gần đầy (&gt;80%)
-        </span>
-        <span className="flex items-center gap-2">
-          <span className="h-3.5 w-3.5 rounded-full bg-rose-500" /> Đầy hẳn (100%)
-        </span>
+        <span className="flex items-center gap-2"><span className="h-3.5 w-3.5 rounded-full bg-emerald-500" /> Còn trống</span>
+        <span className="flex items-center gap-2"><span className="h-3.5 w-3.5 rounded-full bg-amber-400" /> Gần đầy</span>
+        <span className="flex items-center gap-2"><span className="h-3.5 w-3.5 rounded-full bg-rose-500" /> Đầy</span>
       </div>
     </ScreenFrame>
   )
 }
 
-/* =========================================================================
-   2. NHẬN THẺ KHI GỬI XE (TICKET SCREEN)
-   ========================================================================= */
-function TicketScreen() {
-  const [ticketIssued, setTicketIssued] = useState(false)
-
+function TicketScreen({ ticketIssued, onIssueTicket, onResetTicket }: { ticketIssued: boolean; onIssueTicket: () => void; onResetTicket: () => void }) {
   return (
     <ScreenFrame title="Nhận thẻ khi gửi xe vào bãi" subtitle="Cổng vào / ANPR Camera tự động">
       <div className="grid gap-6 lg:grid-cols-2">
@@ -206,23 +193,15 @@ function TicketScreen() {
 
           <div className="mt-6">
             {!ticketIssued ? (
-              <button
-                type="button"
-                onClick={() => setTicketIssued(true)}
-                className="w-full rounded-2xl bg-emerald-600 py-4 text-base font-extrabold text-white shadow-lg transition hover:bg-emerald-700 active:scale-95"
-              >
-                PRESS TO RECEIVE CARD / NHẤN NÚT LẤY THẺ
+              <button type="button" onClick={onIssueTicket} className="w-full rounded-2xl bg-emerald-600 py-4 text-base font-extrabold text-white shadow-lg transition hover:bg-emerald-700 active:scale-95">
+                NHẤN ĐỂ NHẬN THẺ
               </button>
             ) : (
               <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-center">
                 <p className="text-base font-bold text-emerald-900">✅ THẺ ĐÃ PHÁT THÀNH CÔNG!</p>
-                <p className="mt-1 text-xs text-emerald-700">Mã thẻ: <strong className="font-mono">P-8821</strong> | Vui lòng giữ thẻ cẩn thận & Mở cổng Barie.</p>
-                <button
-                  type="button"
-                  onClick={() => setTicketIssued(false)}
-                  className="mt-3 rounded-lg border border-emerald-600 px-3 py-1 text-xs font-bold text-emerald-800 hover:bg-emerald-100"
-                >
-                  Lấy thẻ mới (Reset demo)
+                <p className="mt-1 text-xs text-emerald-700">Mã thẻ: <strong className="font-mono">P-8821</strong> | Vui lòng giữ thẻ cẩn thận.</p>
+                <button type="button" onClick={onResetTicket} className="mt-3 rounded-lg border border-emerald-600 px-3 py-1 text-xs font-bold text-emerald-800 hover:bg-emerald-100">
+                  Lấy thẻ mới
                 </button>
               </div>
             )}
@@ -233,470 +212,354 @@ function TicketScreen() {
   )
 }
 
-/* =========================================================================
-   3. SƠ ĐỒ CHỖ TRỐNG TẦNG B2 (FLOOR MAP SCREEN)
-   ========================================================================= */
-/* =========================================================================
-   3. SƠ ĐỒ CHỖ TRỐNG TẦNG B2 (FLOOR MAP SCREEN)
-   ========================================================================= */
-interface SubBlock {
-  status: 'full' | 'available'
-  available?: number
-  total?: number
-}
+function FloorMapScreen({ selectedFloor, selectedZone, selectedSlot, onSelectSlot, onBack, onCheckPosition }: {
+  selectedFloor: string
+  selectedZone: string
+  selectedSlot: string
+  onSelectSlot: (zone: string, slot: string) => void
+  onBack: () => void
+  onCheckPosition: () => void
+}) {
+  const zoneData = [
+    {
+      zone: 'A',
+      slots: [
+        { key: 'A1', count: '5/20', taken: false },
+        { key: 'A2', count: '2/20', taken: false },
+        { key: 'A3', count: '3/20', taken: false },
+        { key: 'A4', count: '4/20', taken: false },
+        { key: 'A5', count: '1/20', taken: false },
+        { key: 'A6', count: '5/20', taken: false },
+      ],
+    },
+    {
+      zone: 'B',
+      slots: [
+        { key: 'B1', count: '2/20', taken: false },
+        { key: 'B2', count: '3/20', taken: false },
+        { key: 'B3', count: '5/20', taken: false },
+        { key: 'B4', count: '4/20', taken: false },
+        { key: 'B5', count: '1/20', taken: false },
+        { key: 'B6', count: '2/20', taken: false },
+      ],
+    },
+    {
+      zone: 'C',
+      slots: [
+        { key: 'C1', count: '1/20', taken: false },
+        { key: 'C2', count: '5/20', taken: true },
+        { key: 'C3', count: '3/20', taken: false },
+        { key: 'C4', count: '2/20', taken: false },
+        { key: 'C5', count: '4/20', taken: false },
+        { key: 'C6', count: '1/20', taken: false },
+      ],
+    },
+    {
+      zone: 'D',
+      slots: [
+        { key: 'D1', count: '2/20', taken: false },
+        { key: 'D2', count: '1/20', taken: false },
+        { key: 'D3', count: '4/20', taken: false },
+        { key: 'D4', count: '6/20', taken: false },
+        { key: 'D5', count: '3/20', taken: false },
+        { key: 'D6', count: '2/20', taken: false },
+      ],
+    },
+  ]
 
-const ZONE_A_BLOCKS: SubBlock[][] = [
-  [{ status: 'full' }, { status: 'full' }, { status: 'full' }],
-  [{ status: 'full' }, { status: 'full' }, { status: 'available', available: 5, total: 20 }],
-]
-
-const ZONE_B_BLOCKS: SubBlock[][] = [
-  [{ status: 'full' }, { status: 'full' }, { status: 'full' }],
-  [{ status: 'available', available: 2, total: 20 }, { status: 'full' }, { status: 'full' }],
-]
-
-const ZONE_C_BLOCKS: SubBlock[][] = [
-  [{ status: 'full' }, { status: 'full' }, { status: 'available', available: 2, total: 20 }],
-  [{ status: 'available', available: 15, total: 20 }, { status: 'full' }, { status: 'full' }],
-]
-
-const ZONE_D_BLOCKS: SubBlock[][] = [
-  [{ status: 'available', available: 4, total: 20 }, { status: 'full' }, { status: 'full' }],
-  [{ status: 'available', available: 5, total: 20 }, { status: 'full' }, { status: 'available', available: 1, total: 20 }],
-]
-
-const ZONES_DATA = [
-  { id: 'A', name: 'A', blocks: ZONE_A_BLOCKS },
-  { id: 'B', name: 'B', blocks: ZONE_B_BLOCKS },
-  { id: 'C', name: 'C', blocks: ZONE_C_BLOCKS },
-  { id: 'D', name: 'D', blocks: ZONE_D_BLOCKS },
-]
-
-function ZoneCard({ name, blocks }: { name: string; blocks: SubBlock[][] }) {
   return (
-    <div className="rounded-3xl border-2 border-slate-300 bg-white p-5 shadow-sm">
-      <h3 className="mb-4 text-center text-3xl font-black text-slate-900">{name}</h3>
-      <div className="grid gap-3">
-        {blocks.map((row, rIdx) => (
-          <div key={rIdx} className="grid grid-cols-3 gap-3">
-            {row.map((block, cIdx) => {
-              if (block.status === 'full') {
-                return (
-                  <div
-                    key={cIdx}
-                    className="flex h-16 sm:h-20 items-center justify-center rounded-2xl bg-rose-500 shadow-xs transition hover:opacity-90"
-                    title="Khu vực đã đầy"
-                  />
-                )
-              }
-              return (
-                <div
-                  key={cIdx}
-                  className="flex h-16 sm:h-20 items-center justify-center rounded-2xl bg-emerald-500 text-white font-extrabold text-lg sm:text-xl shadow-xs transition hover:opacity-90 font-mono"
-                  title={`Còn trống: ${block.available}/${block.total}`}
-                >
-                  {block.available}/{block.total}
-                </div>
-              )
-            })}
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function FloorMapScreen() {
-  return (
-    <ScreenFrame title="Sơ đồ chi tiết tầng B2">
-      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-md">
-        {/* Floor Title Header */}
-        <div className="mb-6 text-center">
+    <ScreenFrame title="Sơ đồ chi tiết tầng" subtitle="Bãi xe / Khu vực và chỗ trống">
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-md sm:p-6">
+        <div className="mb-5 text-center">
           <h2 className="text-3xl font-black tracking-tight text-slate-900 sm:text-4xl" style={{ fontFamily: '"Space Grotesk", sans-serif' }}>
-            TẦNG B2
+            TẦNG {selectedFloor}
           </h2>
-          <p className="mt-1 text-xs text-slate-500 font-medium">Sơ đồ tổng quan phân khu A - B - C - D</p>
+          <p className="mt-1 text-xs font-medium text-slate-500">Sơ đồ chi tiết khu vực A - B - C - D</p>
         </div>
 
-        {/* 2x2 Zones Grid */}
-        <div className="grid gap-6 md:grid-cols-2 max-w-4xl mx-auto">
-          {ZONES_DATA.map((z) => (
-            <ZoneCard key={z.id} name={z.name} blocks={z.blocks} />
-          ))}
-        </div>
-
-        {/* Bottom Entrance & You are here Pin */}
-        <div className="mt-8 flex flex-col items-center justify-center gap-1.5 pt-4">
-          <div className="flex items-center gap-2">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 text-2xl text-white shadow-md animate-bounce">
-              ⬆
-            </span>
-            <span className="text-2xl">📍</span>
-          </div>
-          <span className="rounded-full bg-slate-900 px-4 py-1.5 text-xs font-black uppercase tracking-wider text-white shadow-sm">
-            You are here! (Vị trí của bạn)
-          </span>
-        </div>
-
-        {/* Legend at bottom */}
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-6 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-semibold text-slate-700">
-          <span className="flex items-center gap-2">
-            <span className="h-4 w-4 rounded-md bg-emerald-500" /> Còn trống (hiện số chỗ / tổng)
-          </span>
-          <span className="flex items-center gap-2">
-            <span className="h-4 w-4 rounded-md bg-rose-500" /> Đã đầy (Occupied)
-          </span>
-        </div>
-      </div>
-    </ScreenFrame>
-  )
-}
-
-/* =========================================================================
-   4. TRA CỨU VỊ TRÍ XE (CHECK-POSITION SCREEN)
-   ========================================================================= */
-function CheckPositionScreen() {
-  const [cardScanned, setCardScanned] = useState(false)
-
-  return (
-    <ScreenFrame title="Tra cứu vị trí xe đỗ bằng Thẻ (Check-Position)" subtitle="Kiosk tìm xe / Quẹt thẻ để hiện vị trí">
-      {!cardScanned ? (
-        <div className="my-8 flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-emerald-300 bg-emerald-50/40 p-8 text-center">
-          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-600 text-3xl text-white shadow-lg">
-            💳
-          </div>
-          <h3 className="mt-4 text-xl font-extrabold text-slate-900">VUI LÒNG QUẸT THẺ GỬI XE VÀO MÁY KIOSK</h3>
-          <p className="mt-1 max-w-md text-sm text-slate-600">
-            Đưa thẻ gửi xe lại gần vùng cảm biến hoặc bấm nút giả lập bên dưới để hệ thống định vị vị trí xe đỗ của bạn.
-          </p>
-          <button
-            type="button"
-            onClick={() => setCardScanned(true)}
-            className="mt-6 rounded-2xl bg-emerald-600 px-6 py-3.5 text-sm font-extrabold text-white shadow-lg transition hover:bg-emerald-700 active:scale-95"
-          >
-            QUẸT THẺ P-8821 (GIẢ LẬP TRA CỨU)
-          </button>
-        </div>
-      ) : (
-        <div>
-          {/* Header banner showing scanned vehicle location */}
-          <div className="mb-6 rounded-2xl border border-emerald-400 bg-emerald-500 p-4 text-white shadow-md">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-emerald-100">KẾT QUẢ TRA CỨU THẺ #P-8821</p>
-                <h3 className="text-xl font-extrabold">Xe của bạn đang đỗ tại: TẦNG B2 - KHU C - Ô VỊ TRÍ C4</h3>
-                <p className="text-xs text-emerald-100 mt-0.5">Biển số: <strong>52-F1 888.88</strong> | Thời gian gửi: 16:20:10</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setCardScanned(false)}
-                className="rounded-xl border border-white/40 bg-white/20 px-3 py-2 text-xs font-bold text-white hover:bg-white/30"
-              >
-                Quẹt thẻ khác ↺
-              </button>
-            </div>
-          </div>
-
-          {/* 2x2 Grid: Zone C highlighted, Zones A/B/D hatched & dimmed */}
-          <div className="grid gap-5 md:grid-cols-2">
-            {/* KHU A - DIMMED OUT */}
-            <div className="striped-pattern flex min-h-[170px] flex-col items-center justify-center rounded-2xl border border-slate-300 p-5 text-center shadow-inner">
-              <span className="text-2xl font-extrabold text-slate-400">KHU A</span>
-              <span className="mt-1 text-xs font-semibold text-slate-400">(Khu vực khác - Không có xe bạn)</span>
-            </div>
-
-            {/* KHU B - DIMMED OUT */}
-            <div className="striped-pattern flex min-h-[170px] flex-col items-center justify-center rounded-2xl border border-slate-300 p-5 text-center shadow-inner">
-              <span className="text-2xl font-extrabold text-slate-400">KHU B</span>
-              <span className="mt-1 text-xs font-semibold text-slate-400">(Khu vực khác - Không có xe bạn)</span>
-            </div>
-
-            {/* KHU C - HIGHLIGHTED ZONE WITH CAR MARKER */}
-            <div className="rounded-2xl border-2 border-emerald-500 bg-white p-5 shadow-lg ring-4 ring-emerald-100">
-              <div className="mb-3 flex items-center justify-between border-b border-emerald-100 pb-2">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-600 text-xs font-bold text-white">C</span>
-                  <h4 className="text-base font-extrabold text-emerald-900">KHU C (KHU VỰC XE ĐỖ)</h4>
-                </div>
-                <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
-                  Vị trí đánh dấu: C4
-                </span>
-              </div>
-
-              <div className="grid grid-cols-5 gap-2">
-                {Array.from({ length: 15 }, (_, i) => {
-                  const spotNum = `C${i + 1}`
-                  const isCarSpot = spotNum === 'C4'
-                  const isOccupied = i === 1 || i === 3 || i === 7
-
-                  if (isCarSpot) {
-                    return (
-                      <div
-                        key={spotNum}
-                        className="col-span-2 flex flex-col items-center justify-center rounded-xl bg-emerald-600 p-2 text-white shadow-md ring-4 ring-emerald-300 animate-bounce"
-                      >
-                        <span className="text-lg">🚗</span>
-                        <span className="text-xs font-extrabold">XE CỦA BẠN (C4)</span>
-                      </div>
-                    )
-                  }
+        <div className="mx-auto grid max-w-4xl gap-4 sm:gap-6 md:grid-cols-2">
+          {zoneData.map(({ zone, slots }) => (
+            <div key={zone} className="rounded-3xl border border-slate-200 bg-slate-50 p-4 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.2)]">
+              <div className="mb-3 text-center text-2xl font-black text-slate-900">{zone}</div>
+              <div className="grid grid-cols-3 gap-2.5">
+                {slots.map((slot) => {
+                  const isSelected = selectedZone === zone && selectedSlot === slot.key
+                  const isFree = !slot.taken
 
                   return (
-                    <div
-                      key={spotNum}
-                      className={`flex h-10 items-center justify-center rounded-lg text-xs font-bold ${
-                        isOccupied ? 'bg-rose-100 text-rose-700 border border-rose-300' : 'bg-slate-100 text-slate-600 border border-slate-200'
+                    <button
+                      key={slot.key}
+                      type="button"
+                      onClick={() => onSelectSlot(zone, slot.key)}
+                      className={`relative flex h-14 items-center justify-center rounded-xl border text-xs font-extrabold transition sm:h-16 ${
+                        isSelected
+                          ? 'border-emerald-500 bg-emerald-500 text-white ring-4 ring-emerald-100'
+                          : isFree
+                            ? 'border-emerald-200 bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                            : 'border-rose-200 bg-rose-100 text-rose-700'
                       }`}
                     >
-                      {spotNum}
-                    </div>
+                      <span className="absolute inset-0 rounded-xl border border-white/30" />
+                      {slot.count}
+                    </button>
                   )
                 })}
               </div>
             </div>
+          ))}
+        </div>
 
-            {/* KHU D - DIMMED OUT */}
-            <div className="striped-pattern flex min-h-[170px] flex-col items-center justify-center rounded-2xl border border-slate-300 p-5 text-center shadow-inner">
-              <span className="text-2xl font-extrabold text-slate-400">KHU D</span>
-              <span className="mt-1 text-xs font-semibold text-slate-400">(Khu vực khác - Không có xe bạn)</span>
-            </div>
-          </div>
-
-          {/* Current Position & Navigation Guidance */}
-          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">📍 VỊ TRÍ HIỆN TẠI (CURRENT POSITION)</p>
-                <p className="text-base font-bold text-slate-900">Kiosk Tra cứu Lối vào Tầng B2 (Kiosk #01)</p>
-                <p className="mt-1 text-xs text-slate-600">
-                  <strong>Hướng dẫn đường đi:</strong> Từ Kiosk đi thẳng 15m theo Lối đi chính → Rẽ phải vào Khu C → Ô đỗ C4 bên tay trái.
-                </p>
-              </div>
-              <div className="rounded-xl border border-emerald-300 bg-emerald-100 px-4 py-2 text-xs font-bold text-emerald-900">
-                Khoảng cách đến xe: ~25 mét
-              </div>
-            </div>
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
+          <div className="inline-flex items-center gap-2 text-xs font-bold text-slate-700">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full border border-emerald-500 bg-emerald-100 text-[10px] text-emerald-700">i</span>
+            <span>YOU ARE HERE</span>
+            <span className="text-slate-400">(Vị trí của bạn)</span>
           </div>
         </div>
-      )}
+
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-5 text-[11px] font-semibold text-slate-600">
+          <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded-sm bg-emerald-100 border border-emerald-300" /> Còn trống</span>
+          <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded-sm bg-rose-100 border border-rose-300" /> Đã đầy</span>
+        </div>
+
+        <div className="mt-6 flex justify-center gap-3">
+          <button type="button" onClick={onBack} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">← Quay về tổng quan</button>
+          <button type="button" onClick={onCheckPosition} className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700">Tra cứu vị trí</button>
+        </div>
+      </div>
     </ScreenFrame>
   )
 }
 
-/* =========================================================================
-   5. LUỒNG THANH TOÁN TƯƠNG TÁC (PAYMENT SCREEN)
-   ========================================================================= */
-type CheckoutStep = 'tap_card' | 'pay' | 'success'
-
-function PaymentScreen() {
-  const [step, setStep] = useState<CheckoutStep>('tap_card')
-  const [method, setMethod] = useState<'qr' | 'card'>('qr')
+function CheckPositionScreen({ positionChecked, selectedFloor, selectedZone, selectedSlot, onCheck, onBackToMap, onGoToPayment }: {
+  positionChecked: boolean
+  selectedFloor: string
+  selectedZone: string
+  selectedSlot: string
+  onCheck: () => void
+  onBackToMap: () => void
+  onGoToPayment: () => void
+}) {
+  if (!positionChecked) {
+    return (
+      <ScreenFrame title="Tra cứu vị trí xe đỗ bằng thẻ" subtitle="Kiosk tìm xe / quẹt thẻ để hiện vị trí">
+        <div className="my-8 flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-emerald-300 bg-emerald-50/40 p-8 text-center">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-600 text-3xl text-white shadow-lg">💳</div>
+          <h3 className="mt-4 text-xl font-extrabold text-slate-900">VUI LÒNG QUẸT THẺ GỬI XE VÀO MÁY KIOSK</h3>
+          <p className="mt-1 max-w-md text-sm text-slate-600">
+            Đưa thẻ gửi xe lại gần vùng cảm biến hoặc bấm nút để hệ thống định vị vị trí xe đỗ.
+          </p>
+          <button type="button" onClick={onCheck} className="mt-6 rounded-2xl bg-emerald-600 px-6 py-3.5 text-sm font-extrabold text-white shadow-lg transition hover:bg-emerald-700 active:scale-95">
+            QUẸT THẺ P-8821 (GIẢ LẬP TRA CỨU)
+          </button>
+        </div>
+      </ScreenFrame>
+    )
+  }
 
   return (
-    <ScreenFrame title="Luồng Thanh toán & Rời bãi xe" subtitle="Kiosk Cổng ra / Tương tác trả thẻ -> Thanh toán -> Barie mở">
-      {/* Progress Steps Indicator */}
+    <ScreenFrame title="Tra cứu vị trí xe đỗ bằng thẻ" subtitle="Kiosk tìm xe / quẹt thẻ để hiện vị trí">
+      <div className="mb-6 rounded-2xl border border-emerald-400 bg-emerald-500 p-4 text-white shadow-md">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-emerald-100">KẾT QUẢ TRA CỨU THẺ #P-8821</p>
+            <h3 className="text-xl font-extrabold">Xe của bạn đang đỗ tại: TẦNG {selectedFloor} - KHU {selectedZone} - Ô VỊ TRÍ {selectedSlot}</h3>
+            <p className="mt-0.5 text-xs text-emerald-100">Biển số: <strong>52-F1 888.88</strong> | Thời gian gửi: 16:20:10</p>
+          </div>
+          <button type="button" onClick={onCheck} className="rounded-xl border border-white/40 bg-white/20 px-3 py-2 text-xs font-bold text-white hover:bg-white/30">
+            Quẹt thẻ khác ↺
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-5 md:grid-cols-2">
+        {['A', 'B', 'C', 'D'].map((zone) => (
+          <div key={zone} className={`flex min-h-[170px] flex-col items-center justify-center rounded-2xl border p-5 text-center shadow-inner ${zone === selectedZone ? 'border-emerald-500 bg-white ring-4 ring-emerald-100' : 'border-slate-300 bg-slate-50/70'}`}>
+            <span className={`text-2xl font-extrabold ${zone === selectedZone ? 'text-emerald-900' : 'text-slate-400'}`}>KHU {zone}</span>
+            <span className={`mt-1 text-xs font-semibold ${zone === selectedZone ? 'text-emerald-700' : 'text-slate-400'}`}>
+              {zone === selectedZone ? `Vị trí đã chọn: ${selectedSlot}` : '(Khu vực khác - Không có xe bạn)'}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-6 flex justify-center gap-3">
+        <button type="button" onClick={onBackToMap} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">← Xem sơ đồ</button>
+        <button type="button" onClick={onGoToPayment} className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700">Thanh toán rời bãi</button>
+      </div>
+    </ScreenFrame>
+  )
+}
+
+function PaymentScreen({ checkoutStep, paymentMethod, selectedFloor, selectedZone, selectedSlot, onSetStep, onSetMethod, onFinish }: {
+  checkoutStep: CheckoutStep
+  paymentMethod: PaymentMethod
+  selectedFloor: string
+  selectedZone: string
+  selectedSlot: string
+  onSetStep: (step: CheckoutStep) => void
+  onSetMethod: (method: PaymentMethod) => void
+  onFinish: () => void
+}) {
+  const stepOrder: CheckoutStep[] = ['tap_card', 'pay', 'success']
+
+  return (
+    <ScreenFrame title="Luồng thanh toán & rời bãi xe" subtitle="Kiosk cổng ra / tương tác trả thẻ -> thanh toán -> barie mở">
       <div className="mb-6 grid grid-cols-3 gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2 text-center text-xs font-bold">
         {[
           ['1. Quẹt thẻ gửi xe', 'tap_card'],
-          ['2. Thanh toán (QR / Thẻ POS)', 'pay'],
-          ['3. Mở Barie rời bãi', 'success'],
-        ].map(([label, sId], idx) => {
-          const isCurrent = step === sId
-          const stepOrder = ['tap_card', 'pay', 'success']
-          const isPassed = stepOrder.indexOf(step) > idx
+          ['2. Thanh toán', 'pay'],
+          ['3. Mở barie rời bãi', 'success'],
+        ].map(([label, step], idx) => {
+          const stepKey = step as CheckoutStep
+          const isCurrent = checkoutStep === stepKey
+          const isPassed = stepOrder.indexOf(checkoutStep) > idx
 
           return (
-            <div
-              key={sId}
-              className={`rounded-xl py-2.5 transition ${
-                isCurrent
-                  ? 'bg-emerald-600 text-white shadow'
-                  : isPassed
-                  ? 'bg-emerald-100 text-emerald-900'
-                  : 'text-slate-400'
-              }`}
-            >
+            <div key={stepKey} className={`rounded-xl py-2.5 transition ${isCurrent ? 'bg-emerald-600 text-white shadow' : isPassed ? 'bg-emerald-100 text-emerald-900' : 'text-slate-400'}`}>
               {label}
             </div>
           )
         })}
       </div>
 
-      {/* BƯỚC 1: QUẸT THẺ */}
-      {step === 'tap_card' && (
+      {checkoutStep === 'tap_card' && (
         <div className="my-6 flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center">
-          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-slate-900 text-3xl text-white shadow-lg">
-            💳
-          </div>
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-slate-900 text-3xl text-white shadow-lg">💳</div>
           <h3 className="mt-4 text-xl font-extrabold text-slate-900">QUẸT THẺ GỬI XE TẠI KIOSK CỔNG RA</h3>
           <p className="mt-1 max-w-md text-sm text-slate-600">
             Quẹt hoặc thả thẻ gửi xe vào khe nhận thẻ để xem thông tin và thanh toán ngay.
           </p>
-          <button
-            type="button"
-            onClick={() => setStep('pay')}
-            className="mt-6 rounded-2xl bg-emerald-600 px-7 py-4 text-base font-extrabold text-white shadow-lg transition hover:bg-emerald-700 active:scale-95"
-          >
+          <button type="button" onClick={() => onSetStep('pay')} className="mt-6 rounded-2xl bg-emerald-600 px-7 py-4 text-base font-extrabold text-white shadow-lg transition hover:bg-emerald-700 active:scale-95">
             QUẸT THẺ THU PHÍ (THẺ #P-8821) →
           </button>
         </div>
       )}
 
-      {/* BƯỚC 2: THANH TOÁN TRỰC TIẾP (THÔNG TIN + MÃ QR / PHƯƠNG THỨC NẰM CÙNG 1 MÀN HÌNH) */}
-      {step === 'pay' && (
+      {checkoutStep === 'pay' && (
         <div className="space-y-6">
           <div className="grid gap-6 lg:grid-cols-12">
-            {/* Cột trái: Thông tin gửi xe & Phí */}
-            <div className="lg:col-span-5 flex flex-col justify-between rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-3">Thông tin phiếu gửi xe</h3>
-                <div className="mt-4 space-y-3 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Mã thẻ:</span>
-                    <span className="font-mono font-bold text-slate-900">#P-8821</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Biển số xe:</span>
-                    <span className="font-mono font-bold text-emerald-700">52-F1 888.88</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Vị trí đỗ:</span>
-                    <span className="font-semibold text-slate-800">Tầng B2 - Khu C (C4)</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Thời gian vào:</span>
-                    <span className="font-mono text-slate-700">16:20 (18/08)</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Thời gian ra:</span>
-                    <span className="font-mono text-slate-700">19:45 (18/08)</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Thời lượng đỗ:</span>
-                    <span className="font-semibold text-slate-800">3 giờ 25 phút</span>
-                  </div>
-                </div>
+            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-5">
+              <h3 className="border-b border-slate-100 pb-3 text-lg font-bold text-slate-900">Thông tin phiếu gửi xe</h3>
+              <div className="mt-4 space-y-3 text-sm">
+                <div className="flex justify-between"><span className="text-slate-500">Mã thẻ:</span><span className="font-mono font-bold text-slate-900">#P-8821</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Biển số xe:</span><span className="font-mono font-bold text-emerald-700">52-F1 888.88</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Vị trí đỗ:</span><span className="font-semibold text-slate-800">Tầng {selectedFloor} - Khu {selectedZone} ({selectedSlot})</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Thời gian vào:</span><span className="font-mono text-slate-700">16:20 (18/08)</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Thời gian ra:</span><span className="font-mono text-slate-700">19:45 (18/08)</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Thời lượng đỗ:</span><span className="font-semibold text-slate-800">3 giờ 25 phút</span></div>
               </div>
 
-              <div className="mt-6 rounded-2xl bg-emerald-50 border border-emerald-200 p-4 text-center">
+              <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-center">
                 <p className="text-xs font-bold uppercase tracking-wider text-emerald-800">Tổng tiền cần thanh toán</p>
-                <p className="mt-1 text-3xl font-black text-emerald-700 font-mono">4.000 VNĐ</p>
+                <p className="mt-1 text-3xl font-black font-mono text-emerald-700">4.000 VNĐ</p>
               </div>
             </div>
 
-            {/* Cột phải: Mã QR hiển thị sẵn & Chọn phương thức thanh toán trực tiếp */}
-            <div className="lg:col-span-7 rounded-3xl border border-slate-200 bg-slate-50 p-6 shadow-sm flex flex-col justify-between">
+            <div className="flex flex-col justify-between rounded-3xl border border-slate-200 bg-slate-50 p-6 shadow-sm lg:col-span-7">
               <div>
-                {/* Thanh chuyển phương thức thanh toán nhanh */}
                 <div className="mb-5 flex rounded-xl bg-slate-200/70 p-1 text-xs font-bold">
-                  <button
-                    type="button"
-                    onClick={() => setMethod('qr')}
-                    className={`flex-1 rounded-lg py-2.5 transition ${
-                      method === 'qr' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
+                  <button type="button" onClick={() => onSetMethod('qr')} className={`flex-1 rounded-lg py-2.5 transition ${paymentMethod === 'qr' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}>
                     📱 Quét mã QR
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setMethod('card')}
-                    className={`flex-1 rounded-lg py-2.5 transition ${
-                      method === 'card' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
+                  <button type="button" onClick={() => onSetMethod('card')} className={`flex-1 rounded-lg py-2.5 transition ${paymentMethod === 'card' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}>
                     💳 Chạm thẻ POS
                   </button>
                 </div>
 
-                {/* Nội dung thanh toán tương ứng */}
-                {method === 'qr' && (
-                  <div className="flex flex-col items-center justify-center rounded-2xl bg-white p-5 border border-slate-200 text-center">
+                {paymentMethod === 'qr' ? (
+                  <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white p-5 text-center">
                     <p className="text-sm font-extrabold text-slate-900">Mở App Ngân hàng / MoMo / VNPay quét mã này</p>
                     <div className="my-3 flex items-center justify-center rounded-2xl border-2 border-dashed border-emerald-400 bg-emerald-50/50 p-4">
                       <div className="w-44 rounded-xl border border-slate-300 bg-white p-3 text-center shadow-sm">
                         <div className="grid grid-cols-8 gap-1">
-                          {Array.from({ length: 64 }).map((_, i) => (
-                            <div key={i} className={`h-2.5 rounded-[1px] ${i % 3 === 0 || i % 5 === 0 ? 'bg-slate-900' : 'bg-slate-100'}`} />
+                          {Array.from({ length: 64 }).map((_, index) => (
+                            <div key={index} className={`h-2.5 rounded-[1px] ${index % 3 === 0 || index % 5 === 0 ? 'bg-slate-900' : 'bg-slate-100'}`} />
                           ))}
                         </div>
                         <p className="mt-2 font-mono text-[9px] font-bold text-slate-600">PARKING-PAY-4K</p>
                       </div>
                     </div>
-                    <p className="text-xs text-slate-500 font-medium">Tự động nhận diện số tiền <strong>4.000 VNĐ</strong></p>
+                    <p className="text-xs font-medium text-slate-500">Tự động nhận diện số tiền <strong>4.000 VNĐ</strong></p>
                   </div>
-                )}
-
-                {method === 'card' && (
-                  <div className="flex flex-col items-center justify-center rounded-2xl bg-white p-8 border border-slate-200 text-center">
+                ) : (
+                  <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white p-8 text-center">
                     <div className="text-4xl">💳</div>
                     <p className="mt-3 text-base font-bold text-slate-900">CHẠM THẺ NGÂN HÀNG (POS)</p>
-                    <p className="mt-1 text-xs text-slate-500 max-w-xs">Chạm thẻ Visa, Mastercard hoặc ATM Napas vào thiết bị đọc POS bên cạnh màn hình.</p>
+                    <p className="mt-1 max-w-xs text-xs text-slate-500">Chạm thẻ Visa, Mastercard hoặc ATM Napas vào thiết bị đọc POS bên cạnh màn hình.</p>
                   </div>
                 )}
               </div>
 
-              {/* Action Button: Nút duy nhất để hoàn tất & mở Barie */}
               <div className="mt-6 flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setStep('tap_card')}
-                  className="rounded-2xl border border-slate-300 bg-white px-4 py-3.5 text-xs font-bold text-slate-700 hover:bg-slate-100"
-                >
-                  ← Quẹt thẻ khác
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStep('success')}
-                  className="flex-1 rounded-2xl bg-emerald-600 py-3.5 text-sm font-black text-white shadow-lg transition hover:bg-emerald-700 active:scale-95"
-                >
-                  XÁC NHẬN THANH TOÁN & MỞ BARIE ✔
-                </button>
+                <button type="button" onClick={() => onSetStep('tap_card')} className="rounded-2xl border border-slate-300 bg-white px-4 py-3.5 text-xs font-bold text-slate-700 hover:bg-slate-100">← Quẹt thẻ khác</button>
+                <button type="button" onClick={() => onSetStep('success')} className="flex-1 rounded-2xl bg-emerald-600 py-3.5 text-sm font-black text-white shadow-lg transition hover:bg-emerald-700 active:scale-95">XÁC NHẬN THANH TOÁN & MỞ BARIE ✔</button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* BƯỚC 3: XÁC NHẬN THÀNH CÔNG & MỞ BARIE */}
-      {step === 'success' && (
+      {checkoutStep === 'success' && (
         <div className="rounded-3xl border border-emerald-300 bg-emerald-50 p-6 text-center">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-600 text-3xl text-white shadow-lg">
-            ✓
-          </div>
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-600 text-3xl text-white shadow-lg">✓</div>
           <h3 className="mt-4 text-2xl font-extrabold text-emerald-950">THANH TOÁN THÀNH CÔNG!</h3>
           <p className="mt-1 text-sm text-emerald-800">Số tiền: <strong className="font-mono text-base">4.000 VNĐ</strong> | Mã GD: TX-2026-00431</p>
 
-          {/* BARRIER GATE OPEN BADGE */}
           <div className="my-6 rounded-2xl border-2 border-emerald-500 bg-emerald-600 p-4 text-white shadow-lg animate-pulse">
             <p className="text-xl font-extrabold tracking-wide">🚧 CỔNG BARIE ĐÃ MỞ - CHÚC QUÝ KHÁCH AN TOÀN!</p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setStep('tap_card')}
-            className="rounded-xl bg-slate-900 px-6 py-3 text-xs font-bold text-white shadow hover:bg-black"
-          >
-            Hoàn tất & Quay về màn hình ban đầu
-          </button>
+          <button type="button" onClick={onFinish} className="rounded-xl bg-slate-900 px-6 py-3 text-xs font-bold text-white shadow hover:bg-black">Hoàn tất & quay về màn hình ban đầu</button>
         </div>
       )}
     </ScreenFrame>
   )
 }
 
-/* =========================================================================
-   MAIN APP ROUTER & SHELL
-   ========================================================================= */
 export default function App() {
   const [activeScreen, setActiveScreen] = useState<Screen>('overview')
+  const [selectedFloor, setSelectedFloor] = useState('B2')
+  const [selectedZone, setSelectedZone] = useState('C')
+  const [selectedSlot, setSelectedSlot] = useState('C4')
+  const [ticketIssued, setTicketIssued] = useState(false)
+  const [positionChecked, setPositionChecked] = useState(false)
+  const [checkoutStep, setCheckoutStep] = useState<CheckoutStep>('tap_card')
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('qr')
 
-  const screenMap: Record<Screen, React.ReactNode> = {
-    overview: <OverviewScreen onNavigate={setActiveScreen} />,
-    ticket: <TicketScreen />,
-    floormap: <FloorMapScreen />,
-    checkposition: <CheckPositionScreen />,
-    payment: <PaymentScreen />,
+  const handleSelectFloor = (floor: string) => {
+    setSelectedFloor(floor)
+    setActiveScreen('floormap')
+  }
+
+  const handleSelectSlot = (zone: string, slot: string) => {
+    setSelectedZone(zone)
+    setSelectedSlot(slot)
+    setActiveScreen('checkposition')
+  }
+
+  const handleIssueTicket = () => {
+    setTicketIssued(true)
+    setActiveScreen('floormap')
+  }
+
+  const resetFlow = () => {
+    setTicketIssued(false)
+    setPositionChecked(false)
+    setCheckoutStep('tap_card')
+    setPaymentMethod('qr')
+    setSelectedFloor('B2')
+    setSelectedZone('C')
+    setSelectedSlot('C4')
+    setActiveScreen('overview')
+  }
+
+  const screenMap: Record<Screen, JSX.Element> = {
+    overview: <OverviewScreen />,
+    ticket: <TicketScreen ticketIssued={ticketIssued} onIssueTicket={handleIssueTicket} onResetTicket={() => setTicketIssued(false)} />,
+    floormap: <FloorMapScreen selectedFloor={selectedFloor} selectedZone={selectedZone} selectedSlot={selectedSlot} onSelectSlot={handleSelectSlot} onBack={() => setActiveScreen('overview')} onCheckPosition={() => setActiveScreen('checkposition')} />,
+    checkposition: <CheckPositionScreen positionChecked={positionChecked} selectedFloor={selectedFloor} selectedZone={selectedZone} selectedSlot={selectedSlot} onCheck={() => setPositionChecked(true)} onBackToMap={() => setActiveScreen('floormap')} onGoToPayment={() => setActiveScreen('payment')} />,
+    payment: <PaymentScreen checkoutStep={checkoutStep} paymentMethod={paymentMethod} selectedFloor={selectedFloor} selectedZone={selectedZone} selectedSlot={selectedSlot} onSetStep={setCheckoutStep} onSetMethod={setPaymentMethod} onFinish={resetFlow} />,
   }
 
   return (
@@ -706,7 +569,7 @@ export default function App() {
           <div>
             <p className="text-[11px] font-bold uppercase tracking-widest text-emerald-700">Parking Kiosk HCI System</p>
             <h1 className="text-sm font-bold text-slate-900 sm:text-base" style={{ fontFamily: '"Space Grotesk", sans-serif' }}>
-              Hệ thống Gửi xe Thông minh - Web Prototype Trực quan
+              Hệ thống Gửi xe Thông minh - Prototype tương tác
             </h1>
           </div>
           <span className="rounded-full border border-emerald-300 bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">
@@ -717,21 +580,17 @@ export default function App() {
 
       <nav className="border-b border-slate-200/80 bg-white/60 backdrop-blur-sm">
         <div className="mx-auto flex w-full max-w-6xl gap-2 overflow-x-auto px-4 py-3 sm:px-6">
-          {SCREENS.map((s) => {
-            const active = s.id === activeScreen
+          {SCREENS.map((screen) => {
+            const active = screen.id === activeScreen
             return (
               <button
-                key={s.id}
+                key={screen.id}
                 type="button"
-                onClick={() => setActiveScreen(s.id)}
-                className={`min-w-fit rounded-xl px-3.5 py-2.5 text-left transition ${
-                  active
-                    ? 'bg-emerald-600 text-white shadow-md'
-                    : 'bg-white text-slate-700 hover:bg-emerald-50 hover:text-emerald-900 border border-slate-200'
-                }`}
+                onClick={() => setActiveScreen(screen.id)}
+                className={`min-w-fit rounded-xl px-3.5 py-2.5 text-left transition ${active ? 'bg-emerald-600 text-white shadow-md' : 'border border-slate-200 bg-white text-slate-700 hover:bg-emerald-50 hover:text-emerald-900'}`}
               >
-                <p className="text-xs font-bold">{s.label}</p>
-                <p className={`text-[10px] ${active ? 'text-emerald-100' : 'text-slate-400'}`}>{s.sub}</p>
+                <p className="text-xs font-bold">{screen.label}</p>
+                <p className={`text-[10px] ${active ? 'text-emerald-100' : 'text-slate-400'}`}>{screen.sub}</p>
               </button>
             )
           })}
@@ -741,7 +600,7 @@ export default function App() {
       <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">{screenMap[activeScreen]}</main>
 
       <footer className="border-t border-slate-200 bg-white/60 py-4 text-center text-xs font-medium text-slate-500">
-        Bản Prototype HCI Chuẩn hóa theo Yêu cầu Khảo sát • Nhấn các Tab menu để tương tác các màn hình.
+        Bản Prototype HCI chuẩn hóa theo yêu cầu • Nhấn các tab menu để tương tác các màn hình.
       </footer>
     </div>
   )
