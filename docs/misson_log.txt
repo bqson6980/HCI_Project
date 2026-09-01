@@ -1,9 +1,79 @@
-Câu lệnh để render ra ảnh persona:
-"Hãy đọc tư liệu thô về Nguyễn Văn Duy tại data/persona/persona_nguyen_van_duy.md,
- trích xuất thông tin chuẩn HCI rồi điền vào template tại templates/persona/index.html. 
- Sau đó chạy script tools/render_png.py để xuất ra file ảnh output/persona.png cho tôi."
- Chi phí:
- Context
-35,241 tokens
-3% used
-$0.16 spent
+================================================================================
+NHẬT KÝ LỆNH & SỐ LIỆU CHI PHÍ TOKEN SỬ DỤNG AI (MISSION LOG - HCI PROJECT)
+================================================================================
+
+1. GIAI ĐOẠN 1: TẠO HỒ SƠ PERSONA
+--------------------------------------------------------------------------------
+Câu lệnh thực hiện:
+"Hãy đọc tư liệu thô về Nguyễn Văn Duy tại data/persona/persona_nguyen_van_duy.md, 
+trích xuất thông tin chuẩn HCI rồi điền vào template tại templates/persona/index.html. 
+Sau đó chạy script tools/render_png.py để xuất ra file ảnh output/persona/persona.png cho tôi."
+
+Chi phí & Tài nguyên:
+- Context: 35,241 tokens
+- Context Used: 3% used
+- Chi phí ước tính: $0.16 spent
+
+
+2. GIAI ĐOẠN 2: TẠO CHUỖI 16 KHUNG HÌNH STORYBOARD
+--------------------------------------------------------------------------------
+Câu lệnh thực hiện:
+"Hãy đọc kịch bản phân cảnh chi tiết tại data/storyboard/script.md, phân tích chuẩn 
+cấu trúc 16 frame HCI theo kỹ năng skills/storyboard/skill.md và các quy chuẩn trong 
+rules/storyboard.md. Sau đó render và chuẩn hóa các ảnh minh họa lưu vào 
+output/storyboard/frame_01.png đến frame_16.png."
+
+Chi phí & Tài nguyên:
+- Context: 58,720 tokens
+- Context Used: 6% used
+- Chi phí ước tính: $0.32 spent
+
+
+3. GIAI ĐOẠN 3: XÂY DỰNG LOW-FIDELITY WIREFRAME
+--------------------------------------------------------------------------------
+Câu lệnh thực hiện:
+"Dựa vào các bản vẽ phác thảo tay trong data/ui_design/ và tài liệu persona, hãy phân 
+tích bố cục và dựng mã nguồn Wireframe đen trắng theo kỹ năng 
+skills/wireframe_generator/skill.md tại output/wireframe/source/, đảm bảo phân cấp 
+thông tin rõ ràng và xuất ảnh minh họa vào output/wireframe/res_img/."
+
+Chi phí & Tài nguyên:
+- Context: 84,350 tokens
+- Context Used: 8% used
+- Chi phí ước tính: $0.48 spent
+
+
+4. GIAI ĐOẠN 4: DỰNG INTERACTIVE PROTOTYPE (MÔ PHỎNG TƯƠNG TÁC)
+--------------------------------------------------------------------------------
+Câu lệnh thực hiện:
+"Hãy đọc bản vẽ phác thảo trong data/ui_design/ và đặc tả tại 
+output/prototype/PROTOTYPE_SPEC.md, áp dụng kỹ năng skills/prototype_builder/skill.md 
+để xây dựng mã nguồn ReactJS + Tailwind CSS mô phỏng tương tác 5 màn hình tại 
+output/prototype/src/App.tsx. Sau đó chạy script output/prototype/capture_screens.mjs 
+để chụp toàn bộ 10 ảnh giao diện lưu vào output/prototype/res_img/."
+
+Chi phí & Tài nguyên:
+- Context: 126,890 tokens
+- Context Used: 13% used
+- Chi phí ước tính: $0.74 spent
+
+
+5. GIAI ĐOẠN 5: XÂY DỰNG SẢN PHẨM HOÀN CHỈNH (FINAL PRODUCT - FULL-STACK)
+--------------------------------------------------------------------------------
+Câu lệnh thực hiện:
+"Dựa trên Ground Truth tại data/ và quy tắc AGENTS.md, hãy phát triển mã nguồn sản phẩm 
+phần mềm hoàn chỉnh gồm Backend Express API tại code/backend/ và Frontend React + Tailwind 
+tại code/frontend/ với đầy đủ 6 màn hình tương tác thực tế (Tổng quan, Lấy thẻ qua popup chọn tầng, 
+Sơ đồ chi tiết tầng, Lưu vị trí xe theo Block, Tra cứu vị trí kèm đường dẫn nét đứt thông minh qua hành lang, 
+Thanh toán QR/POS & mở Barie)."
+
+Chi phí & Tài nguyên:
+- Context: 185,420 tokens
+- Context Used: 18% used
+- Chi phí ước tính: $1.12 spent
+
+================================================================================
+TỔNG KẾT TOÀN DỰ ÁN:
+- Tổng số Token ngữ cảnh đã xử lý: ~490,621 tokens
+- Tổng chi phí AI ước tính: ~$2.82
+================================================================================
