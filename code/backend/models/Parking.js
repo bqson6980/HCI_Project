@@ -18,7 +18,7 @@ class Parking {
   loadMockData() {
     // Initialize 6 floors (B1-B6)
     mockData.floors.forEach(floorData => {
-      this.floors.set(floorData.id, { ...floorData });
+      this.floors.set(floorData.id, JSON.parse(JSON.stringify(floorData)));
     });
 
     // Initialize mock cars
@@ -57,13 +57,10 @@ class Parking {
     }));
   }
 
-  reserveParkingSlot({ zoneId, clusterId, slotNumber, ticketId }) {
+  reserveParkingSlot({ zoneId, clusterId, slotNumber, ticketId, floorId = 'B2' }) {
     const normalizedTicketId = typeof ticketId === 'string' ? ticketId.trim().toUpperCase() : '';
     if (!normalizedTicketId) {
       throw new Error('Parking ticket ID is required');
-    }
-    if (this.parkingReservations.has(normalizedTicketId)) {
-      throw new Error('This parking ticket has already been assigned a parking slot');
     }
 
     const zone = this.parkingLayout.find(item => item.id === zoneId);
@@ -81,23 +78,33 @@ class Parking {
 
     cluster.occupiedSlots.push(slotNumber);
     const parkingSlot = `${clusterId}.${slotNumber}`;
-    const floor = this.floors.get('B2');
+    
+    // Update floor occupancy
+    const floor = this.floors.get(floorId);
     if (floor && floor.occupied < floor.capacity) {
       floor.occupied += 1;
     }
-    this.parkingReservations.set(normalizedTicketId, parkingSlot);
+
+    this.parkingReservations.set(normalizedTicketId, {
+      floorId,
+      zoneId,
+      clusterId,
+      slotNumber,
+      parkingSlot
+    });
+
     const ticket = this.tickets.get(normalizedTicketId);
     if (ticket) {
-      ticket.floor = 'B2';
+      ticket.floor = floorId;
       ticket.slot = parkingSlot;
       const car = this.cars.get(ticket.carId);
       if (car) {
-        car.floor = 'B2';
+        car.floor = floorId;
         car.slot = parkingSlot;
       }
     }
 
-    return { parkingSlot, layout: this.getParkingLayout() };
+    return { parkingSlot, floorId, layout: this.getParkingLayout() };
   }
 
   /**
@@ -110,7 +117,7 @@ class Parking {
       name: floor.name,
       capacity: floor.capacity,
       occupied: floor.occupied,
-      available: floor.capacity - floor.occupied,
+      available: Math.max(0, floor.capacity - floor.occupied),
       status: this.getFloorStatus(floor),
       occupancyPercent: Math.round((floor.occupied / floor.capacity) * 100)
     }));
@@ -136,7 +143,7 @@ class Parking {
     return {
       id: floor.id,
       name: floor.name,
-      sections: floor.sections.map(section => ({
+      sections: floor.sections ? floor.sections.map(section => ({
         id: section.id,
         name: section.name,
         slots: section.slots.map(slot => ({
@@ -146,7 +153,7 @@ class Parking {
         })),
         available: section.slots.filter(s => s.status === 'EMPTY').length,
         total: section.slots.length
-      }))
+      })) : []
     };
   }
 
@@ -179,9 +186,7 @@ class Parking {
     const car = this.cars.get(carId);
     if (!car) throw new Error('Car not found');
 
-    const ticketId = `#P-${Math.random().toString().substring(2, 6)}`;
-    
-    // Calculate initial fee (based on time)
+    const ticketId = `#P-${Math.floor(1000 + Math.random() * 9000)}`;
     const fee = this.calculateFee(new Date(), null);
 
     const ticket = {
@@ -190,7 +195,7 @@ class Parking {
       entryTime: new Date(),
       exitTime: null,
       floor: floorId,
-      slot: slotId || 'A1', // Default slot if not specified
+      slot: slotId || 'A1',
       fee,
       paymentStatus: 'UNPAID',
       paymentMethod: null
@@ -204,7 +209,7 @@ class Parking {
 
     // Update floor occupancy
     const floor = this.floors.get(floorId);
-    if (floor) {
+    if (floor && floor.occupied < floor.capacity) {
       floor.occupied += 1;
     }
 
@@ -215,34 +220,32 @@ class Parking {
    * Get ticket information
    */
   getTicket(ticketId) {
-    return this.tickets.get(ticketId) || null;
+    const normalizedTicketId = typeof ticketId === 'string' ? ticketId.trim().toUpperCase() : '';
+    return this.tickets.get(normalizedTicketId) || null;
   }
 
   /**
    * Get car position based on ticket ID
-   * Returns a position that is consistent for the same ticket ID
    */
   getCarPosition(ticketId) {
     const normalizedTicketId = typeof ticketId === 'string' ? ticketId.trim().toUpperCase() : '';
-    const savedParkingSlot = this.parkingReservations.get(normalizedTicketId);
+    const reservation = this.parkingReservations.get(normalizedTicketId);
     const ticket = this.tickets.get(normalizedTicketId);
 
-    // A user-selected slot always takes precedence over the demo/hash fallback.
-    if (savedParkingSlot) {
-      const [cluster] = savedParkingSlot.split('.');
+    if (reservation) {
+      const { floorId, clusterId, parkingSlot } = reservation;
       return {
-        floor: 'B2',
-        zone: cluster.charAt(0),
-        cluster,
-        slot: savedParkingSlot,
+        floor: floorId || 'B2',
+        zone: clusterId.charAt(0),
+        cluster: clusterId,
+        slot: parkingSlot,
         licensePlate: ticket ? this.cars.get(ticket.carId)?.licensePlate || 'N/A' : 'N/A',
         entryTime: ticket ? new Date(ticket.entryTime).toLocaleTimeString('vi-VN') : 'N/A'
       };
     }
 
     if (!ticket) {
-      // If ticket not found, generate a position based on ticket ID for demo
-      const hash = ticketId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      const hash = normalizedTicketId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
       const zones = ['A', 'B', 'C', 'D'];
       const zone = zones[hash % 4];
       const cluster = (hash % 6) + 1;
@@ -258,7 +261,6 @@ class Parking {
       };
     }
 
-    // Tickets with a recorded B2 slot keep their exact selected location.
     const savedTicketSlot = typeof ticket.slot === 'string' ? ticket.slot.match(/^([A-D]\d)\.(\d{1,2})$/) : null;
     if (savedTicketSlot) {
       const cluster = savedTicketSlot[1];
@@ -272,8 +274,7 @@ class Parking {
       };
     }
 
-    // If ticket found, return its position
-    const hash = ticketId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const hash = normalizedTicketId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
     const zones = ['A', 'B', 'C', 'D'];
     const zone = zones[hash % 4];
     const cluster = (hash % 6) + 1;
@@ -293,13 +294,13 @@ class Parking {
    * Check out a car
    */
   checkOutCar(ticketId) {
-    const ticket = this.tickets.get(ticketId);
+    const normalizedTicketId = typeof ticketId === 'string' ? ticketId.trim().toUpperCase() : '';
+    const ticket = this.tickets.get(normalizedTicketId);
     if (!ticket) throw new Error('Ticket not found');
 
     const exitTime = new Date();
     ticket.exitTime = exitTime;
 
-    // Calculate final fee
     const totalFee = this.calculateFee(ticket.entryTime, exitTime);
     ticket.fee = totalFee;
 
@@ -308,15 +309,12 @@ class Parking {
       car.exitTime = exitTime;
     }
 
-    // Update floor occupancy
-    const floor = this.floors.get(ticket.floor);
-    if (floor && floor.occupied > 0) {
-      floor.occupied -= 1;
-    }
+    // Release slot and update floor occupancy
+    this.releaseTicketSlot(normalizedTicketId, ticket.floor);
 
     return {
       carId: ticket.carId,
-      ticketId,
+      ticketId: normalizedTicketId,
       exitTime,
       totalFee,
       floor: ticket.floor,
@@ -325,61 +323,79 @@ class Parking {
   }
 
   /**
+   * Helper to release a reserved slot and decrement floor occupancy
+   */
+  releaseTicketSlot(normalizedTicketId, floorId) {
+    const reservation = this.parkingReservations.get(normalizedTicketId);
+    if (reservation) {
+      const { zoneId, clusterId, slotNumber } = reservation;
+      const zone = this.parkingLayout.find(item => item.id === zoneId);
+      const cluster = zone?.clusters.find(item => item.id === clusterId);
+      if (cluster) {
+        cluster.occupiedSlots = cluster.occupiedSlots.filter(s => s !== slotNumber);
+      }
+      this.parkingReservations.delete(normalizedTicketId);
+    }
+
+    const targetFloorId = floorId || reservation?.floorId || 'B2';
+    const floor = this.floors.get(targetFloorId);
+    if (floor && floor.occupied > 0) {
+      floor.occupied -= 1;
+    }
+  }
+
+  /**
    * Calculate parking fee based on duration
-   * Rate: 5,000 VND for 0-4 hours, 10,000 for 4-12 hours, 15,000 for overnight
    */
   calculateFee(entryTime, exitTime) {
     if (!exitTime) {
-      // Default fee for new ticket
-      return 5000;
+      return 4000;
     }
-
     const durationMs = exitTime - entryTime;
     const durationHours = durationMs / (1000 * 60 * 60);
 
-    if (durationHours <= 4) return 5000;
-    if (durationHours <= 12) return 10000;
-    return 15000; // Overnight or longer
+    if (durationHours <= 4) return 4000;
+    if (durationHours <= 12) return 8000;
+    return 15000;
   }
 
   /**
    * Process payment
    */
   processPayment(ticketId, amount, method) {
-    const ticket = this.tickets.get(ticketId);
+    const normalizedTicketId = typeof ticketId === 'string' ? ticketId.trim().toUpperCase() : '';
+    const ticket = this.tickets.get(normalizedTicketId);
     if (!ticket) throw new Error('Ticket not found');
-
-    if (amount < ticket.fee) {
-      throw new Error(`Amount ${amount} is less than required fee ${ticket.fee}`);
-    }
 
     const paymentId = `PAY-${uuidv4().substring(0, 8).toUpperCase()}`;
     const payment = {
       id: paymentId,
-      ticketId,
+      ticketId: normalizedTicketId,
       amount,
-      method, // 'QR' or 'POS'
+      method,
       timestamp: new Date(),
       status: 'COMPLETED'
     };
 
     this.payments.set(paymentId, payment);
 
-    // Update ticket payment status
     ticket.paymentStatus = 'PAID';
     ticket.paymentMethod = method;
+    ticket.exitTime = new Date();
 
-    const change = amount - ticket.fee;
+    // Release slot and decrease floor occupancy
+    this.releaseTicketSlot(normalizedTicketId, ticket.floor);
 
     return {
       paymentId,
-      ticketId,
+      ticketId: normalizedTicketId,
       amount,
       fee: ticket.fee,
-      change,
       method,
       status: 'COMPLETED',
-      timestamp: payment.timestamp
+      timestamp: payment.timestamp,
+      releasedFloor: ticket.floor,
+      releasedSlot: ticket.slot
     };
   }
 }

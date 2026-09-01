@@ -27,12 +27,13 @@ app.get('/api/parking-layout', (req, res) => {
 
 app.post('/api/parking-layout/reserve', (req, res) => {
   try {
-    const { zoneId, clusterId, slotNumber, ticketId } = req.body;
+    const { zoneId, clusterId, slotNumber, ticketId, floorId } = req.body;
     const result = parkingSystem.reserveParkingSlot({
       zoneId,
       clusterId,
       slotNumber: Number(slotNumber),
       ticketId,
+      floorId,
     });
     res.json({ success: true, data: result });
   } catch (error) {
@@ -202,7 +203,7 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, '127.0.0.1', () => {
   console.log(`🚗 Parking Management Server is running on http://localhost:${PORT}`);
   console.log(`📋 API Documentation:`);
   console.log(`   - GET  /api/health                 - Health check`);

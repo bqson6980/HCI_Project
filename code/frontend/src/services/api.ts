@@ -18,7 +18,7 @@ export const parkingAPI = {
     throw new Error(response.data.error || 'Failed to fetch parking layout');
   },
 
-  reserveParkingSlot: async (data: { zoneId: string; clusterId: string; slotNumber: number; ticketId?: string }): Promise<any> => {
+  reserveParkingSlot: async (data: { zoneId: string; clusterId: string; slotNumber: number; ticketId?: string; floorId?: string }): Promise<any> => {
     const response = await api.post<ApiResponse<any>>('/parking-layout/reserve', data);
     if (response.data.success && response.data.data) return response.data.data;
     throw new Error(response.data.error || 'Failed to reserve parking slot');

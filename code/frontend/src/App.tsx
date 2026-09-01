@@ -1,56 +1,157 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import parkingAPI from './services/api'
 
 type Screen = 'overview' | 'ticket' | 'floormap' | 'saveposition' | 'checkposition' | 'payment'
 
 const SCREENS: { id: Screen; label: string; sub: string }[] = [
   { id: 'overview', label: '1. Tổng quan', sub: 'Công suất & Chỗ trống B1-B6' },
-  { id: 'ticket', label: '2. Nhận thẻ', sub: 'Vào bãi & Ghi nhận xe' },
-  { id: 'floormap', label: '3. Sơ đồ tầng B2', sub: 'Trực quan chỗ trống & Lối vào/ra' },
-  { id: 'saveposition', label: '4. Lưu vị trí xe', sub: 'Chọn ô đỗ xe' },
-  { id: 'checkposition', label: '5. Tra cứu vị trí', sub: 'Check-position bằng thẻ' },
-  { id: 'payment', label: '6. Thanh toán', sub: 'Luồng trả thẻ & Mở barie' },
+  { id: 'ticket', label: '2. Nhận thẻ', sub: 'Vào bãi & Cấp thẻ tự động' },
+  { id: 'floormap', label: '3. Sơ đồ tầng', sub: 'Sơ đồ trực quan A-B-C-D' },
+  { id: 'saveposition', label: '4. Lưu vị trí xe', sub: 'Ghi nhận Block đỗ xe' },
+  { id: 'checkposition', label: '5. Tra cứu vị trí', sub: 'Tìm xe bằng thẻ gửi' },
+  { id: 'payment', label: '6. Thanh toán', sub: 'Thanh toán & Mở barie' },
 ]
 
-type FloorStatus = 'full' | 'warn' | 'ok'
+type FloorId = 'B1' | 'B2' | 'B3' | 'B4' | 'B5' | 'B6'
+type ZoneId = 'A' | 'B' | 'C' | 'D'
 
-interface FloorDisplay {
+interface Block {
   id: string
+  index: number
   name: string
-  type: string
-  used: number
-  total: number
-  status: FloorStatus
+  available: number
+  capacity: number
 }
 
-function statusBadge(status: FloorStatus) {
-  if (status === 'full') return { label: 'ĐẦY', bg: 'bg-rose-500 text-white border-rose-600' }
-  if (status === 'warn') return { label: 'GẦN ĐẦY', bg: 'bg-amber-400 text-amber-950 border-amber-500' }
+interface Zone {
+  id: ZoneId
+  name: string
+  blocks: Block[]
+}
+
+interface FloorDetail {
+  id: FloorId
+  name: string
+  type: string
+  zones: Zone[]
+}
+
+interface ActiveTicket {
+  id: string
+  licensePlate: string
+  carModel: string
+  entryTime: Date
+  floorId: FloorId
+  zoneId?: ZoneId
+  blockId?: string
+  fee: number
+  status: 'PARKED' | 'PAID'
+}
+
+interface MockCar {
+  licensePlate: string
+  carModel: string
+  color: string
+  camId: string
+}
+
+const MOCK_INCOMING_CARS: MockCar[] = [
+  { licensePlate: '52-F1 888.88', carModel: 'Honda SH 150i', color: 'Đỏ Candy', camId: 'CAM-GATE-01' },
+  { licensePlate: '59-P2 777.77', carModel: 'Vespa Sprint 125', color: 'Trắng Sứ', camId: 'CAM-GATE-02' },
+  { licensePlate: '60-B9 666.66', carModel: 'Honda Winner X', color: 'Đen Nhám', camId: 'CAM-GATE-01' },
+  { licensePlate: '51-K3 999.99', carModel: 'Honda Air Blade 160', color: 'Xám Xi Măng', camId: 'CAM-GATE-03' },
+  { licensePlate: '43-D1 555.55', carModel: 'Honda Vision 110', color: 'Xanh Navy', camId: 'CAM-GATE-01' },
+  { licensePlate: '29-S1 234.56', carModel: 'Yamaha Grande Hybrid', color: 'Hồng Pastel', camId: 'CAM-GATE-02' },
+]
+
+function createInitialFloorDetails(): FloorDetail[] {
+  const floorIds: FloorId[] = ['B1', 'B2', 'B3', 'B4', 'B5', 'B6']
+  const zoneIds: ZoneId[] = ['A', 'B', 'C', 'D']
+
+  const initialBlockCounts: Record<ZoneId, number[]> = {
+    A: [5, 2, 3, 4, 1, 5],
+    B: [2, 3, 5, 4, 1, 2],
+    C: [1, 0, 3, 2, 4, 1],
+    D: [2, 1, 4, 6, 3, 2],
+  }
+
+  return floorIds.map((fId) => ({
+    id: fId,
+    name: `Tầng ${fId}`,
+    type: 'Xe máy',
+    zones: zoneIds.map((zId) => ({
+      id: zId,
+      name: `Khu ${zId}`,
+      blocks: Array.from({ length: 6 }, (_, bIdx) => {
+        const blockIndex = bIdx + 1
+        const blockId = `${zId}${blockIndex}`
+        let freeCount = initialBlockCounts[zId][bIdx]
+
+        if (fId === 'B4') {
+          freeCount = 0
+        } else if (fId === 'B3' || fId === 'B6') {
+          freeCount = 16
+        }
+
+        return {
+          id: blockId,
+          index: blockIndex,
+          name: `Block ${blockId}`,
+          available: freeCount,
+          capacity: 20,
+        }
+      }),
+    })),
+  }))
+}
+
+const INITIAL_TICKETS: ActiveTicket[] = [
+  {
+    id: '#P-8821',
+    licensePlate: '52-F1 888.88',
+    carModel: 'Honda SH 150i',
+    entryTime: new Date(Date.now() - 3 * 3600000 - 25 * 60000),
+    floorId: 'B2',
+    zoneId: 'C',
+    blockId: 'C4',
+    fee: 4000,
+    status: 'PARKED',
+  },
+  {
+    id: '#P-8822',
+    licensePlate: '59-P2 777.77',
+    carModel: 'Vespa Sprint 125',
+    entryTime: new Date(Date.now() - 1 * 3600000 - 10 * 60000),
+    floorId: 'B1',
+    zoneId: 'A',
+    blockId: 'A1',
+    fee: 4000,
+    status: 'PARKED',
+  },
+]
+
+function statusBadge(percent: number, free: number) {
+  if (free === 0 || percent >= 95) return { label: 'ĐẦY', bg: 'bg-rose-500 text-white border-rose-600' }
+  if (percent >= 80) return { label: 'GẦN ĐẦY', bg: 'bg-amber-400 text-amber-950 border-amber-500' }
   return { label: 'CÒN TRỐNG', bg: 'bg-emerald-500 text-white border-emerald-600' }
 }
 
-function statusBarBg(status: FloorStatus) {
-  if (status === 'full') return 'bg-rose-500'
-  if (status === 'warn') return 'bg-amber-400'
+function statusBarBg(percent: number, free: number) {
+  if (free === 0 || percent >= 95) return 'bg-rose-500'
+  if (percent >= 80) return 'bg-amber-400'
   return 'bg-emerald-500'
-}
-
-function getFloorStatus(occupancyPercent: number): FloorStatus {
-  if (occupancyPercent >= 90) return 'full'
-  if (occupancyPercent >= 70) return 'warn'
-  return 'ok'
 }
 
 function ScreenFrame({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-3xl border border-slate-200/80 bg-white/90 p-5 shadow-xl backdrop-blur-md sm:p-7">
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-xl sm:p-7">
       <div className="mb-6 border-b border-slate-200 pb-4">
         {subtitle && (
           <span className="inline-block rounded-md bg-emerald-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-emerald-800">
             {subtitle}
           </span>
         )}
-        <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl font-grotesk">
+        <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
           {title}
         </h2>
       </div>
@@ -59,63 +160,94 @@ function ScreenFrame({ title, subtitle, children }: { title: string; subtitle?: 
   )
 }
 
-/* =========================================================================
-   1. TỔNG QUAN CHỖ TRỐNG (OVERVIEW SCREEN)
-   ========================================================================= */
-function OverviewScreen({ floors }: { floors: FloorDisplay[] }) {
-  const totalSlots = floors.reduce((acc, f) => acc + f.total, 0)
-  const totalUsed = floors.reduce((acc, f) => acc + f.used, 0)
+function OverviewScreen({
+  floors,
+  onSelectFloor,
+  onNavigate,
+}: {
+  floors: FloorDetail[]
+  onSelectFloor: (fId: FloorId) => void
+  onNavigate: (s: Screen) => void
+}) {
+  const floorStats = useMemo(() => {
+    return floors.map((f) => {
+      let total = 0
+      let free = 0
+      f.zones.forEach((z) => {
+        z.blocks.forEach((b) => {
+          total += b.capacity
+          free += b.available
+        })
+      })
+      const used = total - free
+      const percent = total > 0 ? Math.round((used / total) * 100) : 0
+      return { ...f, total, used, free, percent }
+    })
+  }, [floors])
+
+  const totalSlots = floorStats.reduce((acc, f) => acc + f.total, 0)
+  const totalUsed = floorStats.reduce((acc, f) => acc + f.used, 0)
   const totalFree = totalSlots - totalUsed
+  const overallPercent = totalSlots > 0 ? Math.round((totalUsed / totalSlots) * 100) : 0
 
   return (
-    <ScreenFrame title="Tổng quan chỗ trống gửi xe (Hầm B1 - B6)">
+    <ScreenFrame title="Tổng quan chỗ trống gửi xe (Hầm B1 - B6)" subtitle="Cập nhật theo thời gian thực">
       <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <p className="text-xs font-medium uppercase tracking-wider text-slate-500">Tổng sức chứa</p>
-          <p className="mt-1 text-2xl font-extrabold text-slate-900">{totalSlots.toLocaleString()} <span className="text-sm font-normal text-slate-500">chỗ</span></p>
+          <p className="mt-1 text-2xl font-extrabold text-slate-900">
+            {totalSlots.toLocaleString()} <span className="text-sm font-normal text-slate-500">chỗ</span>
+          </p>
         </div>
         <div className="rounded-2xl border border-rose-200 bg-rose-50/50 p-4">
           <p className="text-xs font-medium uppercase tracking-wider text-rose-700">Đã sử dụng</p>
-          <p className="mt-1 text-2xl font-extrabold text-rose-700">{totalUsed.toLocaleString()} <span className="text-sm font-normal text-rose-600">chỗ ({Math.round((totalUsed / totalSlots) * 100)}%)</span></p>
+          <p className="mt-1 text-2xl font-extrabold text-rose-700">
+            {totalUsed.toLocaleString()}{' '}
+            <span className="text-sm font-normal text-rose-600">chỗ ({overallPercent}%)</span>
+          </p>
         </div>
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4">
           <p className="text-xs font-medium uppercase tracking-wider text-emerald-700">Còn trống toàn bãi</p>
-          <p className="mt-1 text-2xl font-extrabold text-emerald-700">{totalFree.toLocaleString()} <span className="text-sm font-normal text-emerald-600">chỗ khả dụng</span></p>
+          <p className="mt-1 text-2xl font-extrabold text-emerald-700">
+            {totalFree.toLocaleString()} <span className="text-sm font-normal text-emerald-600">chỗ khả dụng</span>
+          </p>
         </div>
       </div>
 
       <div className="flex flex-col gap-3">
-        {floors.map((f) => {
-          const percent = Math.round((f.used / f.total) * 100)
-          const available = f.total - f.used
-          const badge = statusBadge(f.status)
+        {floorStats.map((f) => {
+          const badge = statusBadge(f.percent, f.free)
 
           return (
             <div
               key={f.id}
-              className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 sm:flex-row sm:items-center sm:justify-between"
+              onClick={() => {
+                onSelectFloor(f.id)
+                onNavigate('floormap')
+              }}
+              className="group flex cursor-pointer flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-emerald-500 hover:shadow-md sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="flex items-center gap-3.5 min-w-[140px]">
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-lg font-black text-white sm:h-14 sm:w-14 sm:text-xl">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-lg font-black text-white group-hover:bg-emerald-600 transition sm:h-14 sm:w-14 sm:text-xl">
                   {f.id}
                 </span>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">{f.name}</h3>
-                  <p className="text-xs text-slate-500">{f.type}</p>
+                  <h3 className="text-base font-bold text-slate-900 group-hover:text-emerald-700">{f.name}</h3>
+                  <p className="text-xs text-slate-500">{f.type} (4 Khu • 24 Block) →</p>
                 </div>
               </div>
 
               <div className="flex-1 max-w-lg">
                 <div className="mb-1.5 flex items-center justify-between text-xs">
                   <span className="font-semibold text-slate-700">
-                    Còn trống: <strong className="text-slate-900 font-bold">{available}</strong> / {f.total} chỗ
+                    Còn trống: <strong className="text-slate-900 font-bold">{f.free}</strong> / {f.total} chỗ
                   </span>
-                  <span className="text-slate-500 font-medium">{percent}% đã dùng</span>
+                  <span className="text-slate-500 font-medium">{f.percent}% đã dùng</span>
                 </div>
                 <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100 border border-slate-200">
                   <div
-                    className={`h-full rounded-full transition-all duration-500 ${statusBarBg(f.status)}`}
-                    style={{ width: `${percent}%` }}
+                    className={`h-full rounded-full transition-all duration-500 ${statusBarBg(f.percent, f.free)}`}
+                    style={{ width: `${f.percent}%` }}
                   />
                 </div>
               </div>
@@ -130,771 +262,268 @@ function OverviewScreen({ floors }: { floors: FloorDisplay[] }) {
         })}
       </div>
 
-      <div className="mt-6 flex flex-wrap items-center justify-center gap-6 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-semibold text-slate-700">
-        <span className="flex items-center gap-2">
-          <span className="h-3.5 w-3.5 rounded-full bg-emerald-500" /> Còn trống (Available)
-        </span>
-        <span className="flex items-center gap-2">
-          <span className="h-3.5 w-3.5 rounded-full bg-amber-400" /> Gần đầy (&gt;70%)
-        </span>
-        <span className="flex items-center gap-2">
-          <span className="h-3.5 w-3.5 rounded-full bg-rose-500" /> Đầy hẳn (≥90%)
-        </span>
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-semibold text-slate-700">
+        <div className="flex flex-wrap items-center gap-6">
+          <span className="flex items-center gap-2">
+            <span className="h-3.5 w-3.5 rounded-full bg-emerald-500" /> Còn trống
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="h-3.5 w-3.5 rounded-full bg-amber-400" /> Gần đầy
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="h-3.5 w-3.5 rounded-full bg-rose-500" /> Đã đầy
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => onNavigate('ticket')}
+          className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow hover:bg-emerald-700"
+        >
+          Gửi xe vào bãi →
+        </button>
       </div>
     </ScreenFrame>
   )
 }
 
-/* =========================================================================
-   2. NHẬN THẺ KHI GỬI XE (TICKET SCREEN)
-   ========================================================================= */
-function TicketScreen() {
-  const [licensePlate, setLicensePlate] = useState('52-F1 888.88')
-  const [ticketIssued, setTicketIssued] = useState(false)
-  const [ticketId, setTicketId] = useState('')
+function TicketScreen({
+  floors,
+  onIssueTicket,
+  onNavigateToFloorMap,
+  onNavigateToSavePosition,
+}: {
+  floors: FloorDetail[]
+  onIssueTicket: (vehicle: MockCar, floorId: FloorId) => Promise<ActiveTicket>
+  onNavigateToFloorMap: (floorId: FloorId, ticket: ActiveTicket) => void
+  onNavigateToSavePosition: (floorId: FloorId, ticket: ActiveTicket) => void
+}) {
+  const [currentVehicle, setCurrentVehicle] = useState<MockCar | null>(null)
+  const [issuedTicket, setIssuedTicket] = useState<ActiveTicket | null>(null)
+  const [showFloorModal, setShowFloorModal] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Tạo ticket ID dựa trên biển số (hash đơn giản)
-  const generateTicketId = (plate: string) => {
-    const sanitized = plate.replace(/[^A-Z0-9]/g, '')
-    const hash = sanitized.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
-    return `P-${(hash % 10000).toString().padStart(4, '0')}`
+  const floorAvailabilities = useMemo(() => {
+    return floors.map((f) => {
+      let total = 0
+      let free = 0
+      f.zones.forEach((z) => {
+        z.blocks.forEach((b) => {
+          total += b.capacity
+          free += b.available
+        })
+      })
+      return { id: f.id, name: f.name, free, total }
+    })
+  }, [floors])
+
+  const handleOpenReceiveCardModal = () => {
+    const randomCar = MOCK_INCOMING_CARS[Math.floor(Math.random() * MOCK_INCOMING_CARS.length)]
+    setCurrentVehicle(randomCar)
+    setIssuedTicket(null)
+    setShowFloorModal(true)
   }
 
-  const handleReceiveTicket = async () => {
+  const handleSelectFloor = async (floorId: FloorId) => {
+    if (isSubmitting || !currentVehicle) return
+    setIsSubmitting(true)
     try {
-      const car = await parkingAPI.checkInCar(licensePlate)
-      const ticket = await parkingAPI.generateTicket(car.id, 'B1', 'A1')
-      setTicketId(ticket.id)
-      setTicketIssued(true)
-    } catch (error) {
-      console.error('Error:', error)
-      // Fallback: sinh ticket ID dựa trên biển số
-      setTicketId(generateTicketId(licensePlate))
-      setTicketIssued(true)
+      const ticket = await onIssueTicket(currentVehicle, floorId)
+      setIssuedTicket(ticket)
+      setShowFloorModal(false)
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
-  return (
-    <ScreenFrame title="Nhận thẻ khi gửi xe vào bãi" subtitle="Cổng vào / ANPR Camera tự động">
-      <div className="space-y-6">
-        {/* Phần 1: Input + Bảng giá (2 cột) */}
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Khung nhập biển số */}
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Nhập biển số hoặc Nhận diện tự động</span>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Camera Active
-              </span>
-            </div>
+  const handleResetForNextCar = () => {
+    setCurrentVehicle(null)
+    setIssuedTicket(null)
+  }
 
-            <div className="rounded-xl border border-slate-300 bg-white p-4 text-center shadow-inner">
-              <input
-                type="text"
-                value={licensePlate}
-                onChange={(e) => setLicensePlate(e.target.value.toUpperCase())}
-                placeholder="52-F1 888.88"
-                className="w-full text-center text-3xl font-extrabold tracking-wider text-slate-900 border-0 outline-0 font-mono"
-                style={{ background: 'transparent' }}
-              />
-              <p className="mt-2 text-xs font-medium text-slate-600">
-                Thời gian vào: <span className="font-mono font-bold text-slate-900">{new Date().toLocaleTimeString('vi-VN')} - {new Date().toLocaleDateString('vi-VN')}</span>
-              </p>
-            </div>
+  return (
+    <ScreenFrame title="Nhận thẻ khi gửi xe vào bãi" subtitle="Cổng vào / Nhận diện phương tiện tự động">
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Nhận diện phương tiện (ANPR)</span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Camera Active
+            </span>
           </div>
 
-          {/* Bảng giá + Nút lấy thẻ */}
-          <div className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5">
-            <div>
-              <h3 className="text-base font-bold text-slate-900">Bảng giá gửi xe theo khung giờ</h3>
-              <p className="text-xs text-slate-500">Áp dụng cho xe máy & ô tô vãng lai</p>
-
-              <div className="mt-4 divide-y divide-slate-100 rounded-xl border border-slate-200 bg-slate-50/50">
-                {[
-                  ['Khung 0 - 4 giờ', '5.000 VNĐ'],
-                  ['Khung 4 - 12 giờ', '10.000 VNĐ'],
-                  ['Qua đêm (> 12 giờ)', '15.000 VNĐ'],
-                  ['Vé tháng cư dân', '120.000 VNĐ / tháng'],
-                ].map(([time, fee]) => (
-                  <div key={time} className="flex items-center justify-between px-4 py-3 text-sm">
-                    <span className="font-medium text-slate-700">{time}</span>
-                    <span className="font-mono font-bold text-emerald-700">{fee}</span>
-                  </div>
-                ))}
-              </div>
+          {currentVehicle ? (
+            <div className="rounded-xl border border-emerald-300 bg-emerald-50/70 p-4 text-center shadow-inner">
+              <p className="text-xs font-semibold text-emerald-800">Biển số phát hiện tại làn quét:</p>
+              <p className="mt-1 text-3xl font-extrabold tracking-wider text-slate-900 font-mono">
+                {currentVehicle.licensePlate}
+              </p>
+              <p className="mt-1 text-xs text-slate-600">
+                Dòng xe: <strong className="text-slate-900">{currentVehicle.carModel}</strong> ({currentVehicle.color})
+              </p>
+              <p className="mt-1 text-xs font-medium text-slate-600">
+                Thời gian vào: <span className="font-mono font-bold text-slate-900">{new Date().toLocaleTimeString('vi-VN')}</span>
+              </p>
             </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center shadow-inner">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-2xl">
+                📷
+              </div>
+              <p className="mt-2 text-sm font-bold text-slate-700">LÀN QUÉT XE ĐANG CHỜ</p>
+              <p className="mt-1 text-xs text-slate-500">
+                Vui lòng nhấn nút <strong>"NHẤN NÚT LẤY THẺ"</strong> để quét xe và nhận thẻ vào bãi.
+              </p>
+            </div>
+          )}
 
-            <div className="mt-6">
-              {!ticketIssued ? (
-                <button
-                  type="button"
-                  onClick={handleReceiveTicket}
-                  className="w-full rounded-2xl bg-emerald-600 py-4 text-base font-extrabold text-white shadow-lg transition hover:bg-emerald-700 active:scale-95"
-                >
-                  PRESS TO RECEIVE CARD / NHẤN NÚT LẤY THẺ
-                </button>
+          <div className="mt-4 overflow-hidden rounded-xl border border-slate-800 bg-slate-950 text-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-800 px-3 py-2 text-[11px] font-mono text-emerald-400">
+              <span>{currentVehicle ? currentVehicle.camId : 'CAM-GATE-01'}</span>
+              <span>LIVE 1080P</span>
+            </div>
+            <div className="relative flex h-40 items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 p-4">
+              {currentVehicle ? (
+                <div className="rounded-lg border-2 border-emerald-400/80 bg-black/70 px-5 py-3 text-center backdrop-blur">
+                  <p className="text-xs font-mono text-emerald-300">ANPR MATCH 99.8%</p>
+                  <p className="text-2xl font-bold font-mono text-white tracking-wider">{currentVehicle.licensePlate}</p>
+                  <p className="text-[11px] text-slate-300 font-mono mt-0.5">{currentVehicle.carModel}</p>
+                </div>
               ) : (
-                <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-center">
-                  <p className="text-base font-bold text-emerald-900">✅ THẺ ĐÃ PHÁT THÀNH CÔNG!</p>
-                  <p className="mt-1 text-xs text-emerald-700">Mã thẻ: <strong className="font-mono">{ticketId}</strong> | Vui lòng giữ thẻ cẩn thận & Mở cổng Barie.</p>
-                  <button
-                    type="button"
-                    onClick={() => { setTicketIssued(false); setLicensePlate('52-F1 888.88') }}
-                    className="mt-3 rounded-lg border border-emerald-600 px-3 py-1 text-xs font-bold text-emerald-800 hover:bg-emerald-100"
-                  >
-                    Lấy thẻ mới (Reset demo)
-                  </button>
+                <div className="flex flex-col items-center justify-center text-center">
+                  <div className="h-10 w-10 rounded-full border-2 border-emerald-500/40 border-t-emerald-400 animate-spin mb-2" />
+                  <p className="text-xs font-mono text-slate-400">CHỜ PHƯƠNG TIỆN TIẾN VÀO LÀN...</p>
                 </div>
               )}
             </div>
           </div>
         </div>
 
-        {/* Phần 2: Khung Camera ANPR (Full width) */}
-        <div className="rounded-2xl border border-slate-200 bg-slate-800 p-6 shadow-lg">
-          <div className="mb-3 flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 font-mono">
-              CAM-ENTRY-GATE-01 • LIVE 1080P
-            </span>
-            <span className="text-xs font-bold text-emerald-400">ANPR DETECTION ACTIVE</span>
-          </div>
+        <div className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5">
+          <div>
+            <h3 className="text-base font-bold text-slate-900">Bảng giá gửi xe theo khung giờ</h3>
+            <p className="text-xs text-slate-500">Áp dụng cho xe máy & ô tô vãng lai</p>
 
-          {/* Màn hình camera giả lập */}
-          <div className="relative rounded-xl border-2 border-slate-600 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 p-6 min-h-[300px] flex flex-col items-center justify-center overflow-hidden">
-            {/* Hiệu ứng scan line */}
-            <div className="absolute inset-0 pointer-events-none">
-              <div className="absolute inset-0 opacity-5 bg-repeat-y" style={{
-                backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,.03) 2px, rgba(255,255,255,.03) 4px)'
-              }} />
+            <div className="mt-3 divide-y divide-slate-100 rounded-xl border border-slate-200 bg-slate-50/50">
+              {[
+                ['Khung 0 - 4 giờ', '4.000 VNĐ'],
+                ['Khung 4 - 12 giờ', '8.000 VNĐ'],
+                ['Qua đêm (> 12 giờ)', '15.000 VNĐ'],
+                ['Vé tháng cư dân', '120.000 VNĐ / tháng'],
+              ].map(([time, fee]) => (
+                <div key={time} className="flex items-center justify-between px-3.5 py-2.5 text-xs">
+                  <span className="font-medium text-slate-700">{time}</span>
+                  <span className="font-mono font-bold text-emerald-700">{fee}</span>
+                </div>
+              ))}
             </div>
 
-            {/* Nội dung camera */}
-            <div className="relative z-10 text-center">
-              <p className="text-sm font-bold text-emerald-300 mb-4 tracking-wider">BIỂN SỐ ĐƯỢC PHÁT HIỆN</p>
-              
-              {/* Hiển thị biển số (read-only, tự động cập nhật) */}
-              <div className="rounded-lg border-3 border-emerald-400 bg-black/60 px-8 py-6 backdrop-blur mb-6">
-                <p className="text-5xl font-extrabold font-mono text-white tracking-wider drop-shadow-lg">
-                  {licensePlate}
+            <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/40 p-3 text-xs text-emerald-900">
+              💡 <strong>Hướng dẫn:</strong> Nhấn nút bên dưới để chọn tầng gửi xe. Thẻ phát ra sẽ được gắn với tầng bạn đã chọn.
+            </div>
+          </div>
+
+          <div className="mt-5">
+            {!issuedTicket ? (
+              <button
+                type="button"
+                onClick={handleOpenReceiveCardModal}
+                className="w-full rounded-2xl bg-emerald-600 py-4 text-base font-extrabold text-white shadow-lg transition hover:bg-emerald-700 active:scale-95"
+              >
+                PRESS TO RECEIVE CARD / NHẤN NÚT LẤY THẺ
+              </button>
+            ) : (
+              <div className="rounded-2xl border-2 border-emerald-500 bg-emerald-50 p-4 text-center shadow-md">
+                <p className="text-base font-black text-emerald-900">✅ THẺ ĐÃ PHÁT THÀNH CÔNG!</p>
+                <div className="my-2 rounded-xl bg-white p-3 border border-emerald-200 text-xs">
+                  <p>Mã thẻ: <strong className="font-mono text-lg text-emerald-700">{issuedTicket.id}</strong></p>
+                  <p className="mt-0.5">Biển số: <strong>{issuedTicket.licensePlate}</strong> | Tầng đăng ký: <strong className="text-slate-900 font-black text-sm">{issuedTicket.floorId}</strong></p>
+                  <p className="text-[11px] text-slate-500 mt-1">Barie cổng vào đã mở. Chúc quý khách gửi xe an toàn.</p>
+                </div>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <button
+                    type="button"
+                    onClick={() => onNavigateToSavePosition(issuedTicket.floorId, issuedTicket)}
+                    className="flex-1 rounded-xl bg-emerald-600 py-3 text-xs font-black text-white shadow hover:bg-emerald-700 active:scale-95"
+                  >
+                    Lưu vị trí đỗ xe tại Tầng {issuedTicket.floorId} →
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onNavigateToFloorMap(issuedTicket.floorId, issuedTicket)}
+                    className="rounded-xl border border-emerald-400 bg-emerald-50 px-3 py-3 text-xs font-bold text-emerald-800 hover:bg-emerald-100"
+                  >
+                    Sơ đồ {issuedTicket.floorId}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResetForNextCar}
+                    className="rounded-xl border border-slate-300 bg-white px-3 py-3 text-xs font-bold text-slate-700 hover:bg-slate-100"
+                  >
+                    Lượt tiếp ↺
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {showFloorModal && currentVehicle && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div>
+                <h3 className="text-lg font-black text-slate-900">CHỌN TẦNG GỬI XE</h3>
+                <p className="text-xs text-slate-500">
+                  Biển số: <strong className="text-slate-900 font-mono">{currentVehicle.licensePlate}</strong> ({currentVehicle.carModel})
                 </p>
               </div>
-
-              {/* Thông tin ANPR */}
-              <div className="space-y-2">
-                <p className="text-xs font-mono text-emerald-300">
-                  ANPR MATCH CONFIDENCE: <span className="font-bold text-emerald-400">99.2%</span>
-                </p>
-                <p className="text-xs font-mono text-emerald-300">
-                  DETECTED TIME: <span className="font-bold text-emerald-400">{new Date().toLocaleTimeString('vi-VN')}</span>
-                </p>
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowFloorModal(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200"
+              >
+                ✕
+              </button>
             </div>
 
-            {/* Góc camera indicator */}
-            <div className="absolute top-4 right-4 flex items-center gap-2">
-              <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></div>
-              <span className="text-[10px] font-mono text-emerald-400">REC</span>
-            </div>
-          </div>
+            <p className="text-xs text-slate-600 my-4">
+              Vui lòng chọn tầng còn chỗ bên dưới để nhận thẻ:
+            </p>
 
-          {/* Info bar dưới camera */}
-          <div className="mt-3 rounded-lg bg-slate-700/50 px-4 py-2 flex items-center justify-end text-xs">
-            <span className="text-emerald-400 font-mono">● REC</span>
-          </div>
-        </div>
-      </div>
-    </ScreenFrame>
-  )
-}
-
-/* =========================================================================
-   3. SƠ ĐỒ CHỖ TRỐNG TẦNG B2 (FLOOR MAP SCREEN)
-   ========================================================================= */
-type ParkingCluster = {
-  id: string
-  occupiedSlots: number[]
-  disabled?: boolean
-}
-
-type ParkingZone = {
-  id: string
-  clusters: ParkingCluster[]
-}
-
-const createParkingZones = (): ParkingZone[] =>
-  ['A', 'B', 'C', 'D'].map((zoneId) => ({
-    id: zoneId,
-    clusters: Array.from({ length: 6 }, (_, index) => {
-      const id = `${zoneId}${index + 1}`
-      // Trạng thái mẫu cho prototype: các cụm đầy hiển thị đỏ và không thể chọn.
-      const isFull = ['A2', 'B5', 'C3', 'D6'].includes(id)
-      return {
-        id,
-        occupiedSlots: isFull ? Array.from({ length: 20 }, (_, slot) => slot + 1) : [1, 3, 6, 9, 12],
-        disabled: isFull,
-      }
-    }),
-  }))
-
-function ZoneCard({
-  zone,
-}: {
-  zone: ParkingZone
-}) {
-  const occupied = zone.clusters.reduce((total, cluster) => total + cluster.occupiedSlots.length, 0)
-
-  return (
-    <div className="rounded-3xl border-2 border-slate-300 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-3xl font-black text-slate-900">{zone.id}</h3>
-        <span className="font-mono text-sm font-extrabold text-slate-600">{occupied}/120</span>
-      </div>
-      <div className="grid grid-cols-3 gap-3">
-        {zone.clusters.map((cluster) => {
-          const isFull = cluster.disabled || cluster.occupiedSlots.length >= 20
-          return (
-            <div
-              key={cluster.id}
-              title={`Cụm ${cluster.id}: ${cluster.occupiedSlots.length}/20 chỗ đã đỗ`}
-              className={`flex h-16 flex-col items-center justify-center rounded-2xl font-extrabold shadow-xs sm:h-20 ${
-                isFull ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white'
-              }`}
-            >
-              <span className="text-xs">{cluster.id}</span>
-              <span className="font-mono text-lg">{isFull ? 'ĐẦY' : `${cluster.occupiedSlots.length}/20`}</span>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-function FloorMapScreen() {
-  const [parkingZones, setParkingZones] = useState<ParkingZone[]>(createParkingZones)
-
-  useEffect(() => {
-    parkingAPI.getParkingLayout()
-      .then((layout) => setParkingZones(layout as ParkingZone[]))
-      .catch(() => setParkingZones(createParkingZones()))
-  }, [])
-
-  return (
-    <ScreenFrame title="Sơ đồ chi tiết tầng B2">
-      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-md">
-        <div className="mb-6 text-center">
-          <h2 className="text-3xl font-black tracking-tight text-slate-900 sm:text-4xl font-grotesk">
-            TẦNG B2
-          </h2>
-          <p className="mt-1 text-xs text-slate-500 font-medium">Sơ đồ tổng quan phân khu A - B - C - D</p>
-        </div>
-
-        <div className="grid gap-6 md:grid-cols-2 max-w-4xl mx-auto">
-          {parkingZones.map((zone) => (
-            <ZoneCard key={zone.id} zone={zone} />
-          ))}
-        </div>
-
-        <div className="mt-8 flex flex-col items-center justify-center gap-1.5 pt-4">
-          <div className="flex items-center gap-2">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 text-2xl text-white shadow-md animate-bounce">
-              ⬆
-            </span>
-            <span className="text-2xl">📍</span>
-          </div>
-          <span className="rounded-full bg-slate-900 px-4 py-1.5 text-xs font-black uppercase tracking-wider text-white shadow-sm">
-            You are here! (Vị trí của bạn)
-          </span>
-        </div>
-
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-6 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-semibold text-slate-700">
-          <span className="flex items-center gap-2">
-            <span className="h-4 w-4 rounded-md bg-emerald-500" /> Còn trống (hiện số chỗ / tổng)
-          </span>
-          <span className="flex items-center gap-2">
-            <span className="h-4 w-4 rounded-md bg-rose-500" /> Đã đầy (Occupied)
-          </span>
-        </div>
-      </div>
-    </ScreenFrame>
-  )
-}
-
-/* =========================================================================
-   4. LƯU VỊ TRÍ XE - CHỌN Ô ĐỖ XE (SAVE POSITION SCREEN)
-   ========================================================================= */
-function SavePositionScreen() {
-  const [ticketId, setTicketId] = useState('')
-  const [parkingZones, setParkingZones] = useState<ParkingZone[]>(createParkingZones)
-  const [selectedZone, setSelectedZone] = useState<string | null>(null)
-  const [selectedCluster, setSelectedCluster] = useState<string | null>(null)
-  const [selectedSlot, setSelectedSlot] = useState<number | null>(null)
-  const [confirmed, setConfirmed] = useState(false)
-  const [saveError, setSaveError] = useState('')
-
-  const currentZone = parkingZones.find((zone) => zone.id === selectedZone)
-  const currentCluster = currentZone?.clusters.find((cluster) => cluster.id === selectedCluster)
-  const occupiedSlots = currentCluster?.occupiedSlots ?? []
-  const hasTicketId = ticketId.trim().length > 0
-
-  useEffect(() => {
-    parkingAPI.getParkingLayout()
-      .then((layout) => setParkingZones(layout as ParkingZone[]))
-      .catch(() => setParkingZones(createParkingZones()))
-  }, [])
-
-  const handleConfirm = async () => {
-    if (!hasTicketId || !currentZone || !currentCluster || selectedSlot === null || occupiedSlots.includes(selectedSlot)) return
-
-    setSaveError('')
-
-    try {
-      const result = await parkingAPI.reserveParkingSlot({
-        zoneId: currentZone.id,
-        clusterId: currentCluster.id,
-        slotNumber: selectedSlot,
-        ticketId: ticketId.trim() || undefined,
-      })
-      setParkingZones(result.layout as ParkingZone[])
-    } catch (error: any) {
-      console.error('Unable to save parking slot to server:', error)
-      if (error?.response) {
-        setSaveError(error.response.data?.error || 'Không thể lưu vị trí đỗ xe.')
-        return
-      }
-      // Prototype remains usable when the local backend has not been started.
-      setParkingZones((zones) => zones.map((zone) => (
-        zone.id === currentZone.id
-          ? {
-              ...zone,
-              clusters: zone.clusters.map((cluster) => (
-                cluster.id === currentCluster.id
-                  ? { ...cluster, occupiedSlots: [...cluster.occupiedSlots, selectedSlot] }
-                  : cluster
-              )),
-            }
-          : zone
-      )))
-    }
-    setConfirmed(true)
-  }
-
-  const handleReset = () => {
-    setTicketId('')
-    setParkingZones(createParkingZones())
-    setSelectedZone(null)
-    setSelectedCluster(null)
-    setSelectedSlot(null)
-    setConfirmed(false)
-    setSaveError('')
-  }
-
-  return (
-    <ScreenFrame title="Lưu vị trí xe - Chọn ô đỗ xe" subtitle="Khách hàng chọn vị trí đỗ xe của mình">
-      <div className="space-y-6">
-          {confirmed && currentCluster && selectedSlot !== null && (
-            <div className="rounded-2xl border-2 border-emerald-400 bg-emerald-50 p-4 text-center text-sm font-bold text-emerald-900">
-              Đã xác nhận ô {currentCluster.id}.{selectedSlot}. Ô này đã chuyển sang trạng thái đã đỗ.
-            </div>
-          )}
-          {/* Nhập mã thẻ xe */}
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Nhập mã thẻ xe</label>
-            <input
-              type="text"
-              value={ticketId}
-              onChange={(e) => {
-                setTicketId(e.target.value.toUpperCase())
-                setSelectedZone(null)
-                setSelectedCluster(null)
-                setSelectedSlot(null)
-                setConfirmed(false)
-                setSaveError('')
-              }}
-              placeholder="P-1234"
-              className="w-full px-4 py-3 border border-slate-300 rounded-lg text-center text-lg font-mono font-bold text-slate-900"
-            />
-            {!hasTicketId && <p className="mt-2 text-xs font-semibold text-amber-700">Nhập mã thẻ xe để mở chức năng chọn khu, cụm và ô đỗ.</p>}
-          </div>
-
-          {saveError && <p role="alert" className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-800">{saveError}</p>}
-
-          <section>
-            <h3 className="mb-4 text-lg font-bold text-slate-900">Bước 1 — Chọn khu vực:</h3>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {parkingZones.map((zone) => {
-                const availableClusters = zone.clusters.filter((cluster) => !cluster.disabled && cluster.occupiedSlots.length < 20).length
+            <div className="grid grid-cols-3 gap-3">
+              {floorAvailabilities.map((fa) => {
+                const isFull = fa.free === 0
                 return (
                   <button
-                    key={zone.id}
+                    key={fa.id}
                     type="button"
-                    disabled={!hasTicketId}
-                    onClick={() => { setSelectedZone(zone.id); setSelectedCluster(null); setSelectedSlot(null); setConfirmed(false) }}
-                    className={`rounded-2xl border-2 bg-white p-5 text-center shadow-sm transition ${
-                      !hasTicketId
-                        ? 'cursor-not-allowed border-slate-200 opacity-50'
-                        : selectedZone === zone.id
-                        ? 'border-emerald-700 bg-emerald-50 ring-4 ring-emerald-100'
-                        : 'border-slate-300 hover:border-emerald-500 hover:bg-emerald-50'
+                    disabled={isFull || isSubmitting}
+                    onClick={() => handleSelectFloor(fa.id as FloorId)}
+                    className={`flex flex-col items-center justify-center rounded-2xl p-4 text-center transition border shadow-xs ${
+                      isFull
+                        ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                        : 'bg-emerald-50/60 border-emerald-300 text-slate-900 hover:bg-emerald-600 hover:text-white hover:border-emerald-600 active:scale-95'
                     }`}
                   >
-                    <p className="text-3xl font-black text-slate-900">KHU {zone.id}</p>
-                    <p className="mt-2 text-xs font-bold text-emerald-700">{availableClusters}/6 cụm còn chỗ</p>
+                    <span className="text-lg font-black">{fa.id}</span>
+                    <span className="text-[11px] font-semibold mt-1">
+                      {isFull ? 'HẾT CHỖ' : `Còn ${fa.free} chỗ`}
+                    </span>
                   </button>
                 )
               })}
             </div>
-          </section>
 
-          {currentZone && (
-            <section>
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <h3 className="text-lg font-bold text-slate-900">Bước 2 — Chọn cụm trong khu {currentZone.id}:</h3>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">Mỗi cụm có 20 ô đỗ</span>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {currentZone.clusters.map((cluster) => {
-                  const isAvailable = !cluster.disabled && cluster.occupiedSlots.length < 20
-                  return (
-                    <button
-                      key={cluster.id}
-                      type="button"
-                      disabled={!hasTicketId || !isAvailable}
-                      onClick={() => { setSelectedCluster(cluster.id); setSelectedSlot(null); setConfirmed(false) }}
-                      className={`rounded-2xl border-2 p-4 text-left transition ${
-                        isAvailable
-                          ? selectedCluster === cluster.id
-                            ? 'border-emerald-700 bg-emerald-600 text-white ring-4 ring-emerald-100'
-                            : 'border-emerald-300 bg-white text-slate-900 hover:border-emerald-600 hover:bg-emerald-50'
-                          : 'cursor-not-allowed border-rose-600 bg-rose-500 text-white opacity-80'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xl font-black">{cluster.id}</span>
-                        <span className="font-mono text-sm font-extrabold">{cluster.occupiedSlots.length}/20</span>
-                      </div>
-                      <p className={`mt-1 text-xs font-semibold ${isAvailable && selectedCluster !== cluster.id ? 'text-emerald-700' : 'text-current'}`}>
-                        {isAvailable ? 'Nhấp để chọn cụm' : 'Cụm đã đầy'}
-                      </p>
-                    </button>
-                  )
-                })}
-              </div>
-            </section>
-          )}
-
-          {currentCluster && (
-            <section className="rounded-3xl border-2 border-emerald-300 bg-emerald-50/60 p-5 sm:p-6">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">Bước 3 — Chọn ô đỗ trong cụm</p>
-                  <h3 className="text-2xl font-black text-slate-900">Cụm {currentCluster.id} · {currentCluster.occupiedSlots.length}/20 chỗ đã đỗ</h3>
-                </div>
-                <button type="button" onClick={() => { setSelectedCluster(null); setSelectedSlot(null) }} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
-                  Chọn cụm khác
-                </button>
-              </div>
-              <p className="mt-4 text-sm text-slate-600">Chọn chính xác một ô trống để đỗ xe. Các ô đỏ đã có xe và không thể chọn.</p>
-              <div className="mt-4 grid grid-cols-4 gap-2 sm:grid-cols-5">
-                {Array.from({ length: 20 }, (_, index) => index + 1).map((slotNumber) => {
-                  const isOccupied = occupiedSlots.includes(slotNumber)
-                  const isSelected = selectedSlot === slotNumber
-                  return (
-                    <button
-                      key={slotNumber}
-                      type="button"
-                      disabled={!hasTicketId || isOccupied}
-                      onClick={() => { setSelectedSlot(slotNumber); setConfirmed(false) }}
-                      className={`flex min-h-14 flex-col items-center justify-center rounded-xl border-2 text-xs font-extrabold transition ${
-                        isOccupied ? 'cursor-not-allowed border-rose-600 bg-rose-500 text-white' : isSelected ? 'border-emerald-700 bg-emerald-600 text-white ring-4 ring-emerald-200' : 'border-emerald-300 bg-white text-emerald-800 hover:border-emerald-600 hover:bg-emerald-100'
-                      }`}
-                    >
-                      <span>{isOccupied ? 'ĐÃ ĐỖ' : 'Ô TRỐNG'}</span>
-                      <span className="mt-0.5 font-mono">{currentCluster.id}.{slotNumber}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </section>
-          )}
-
-          {/* Buttons */}
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                if (selectedSlot !== null) {
-                  setSelectedSlot(null)
-                } else if (selectedCluster) {
-                  setSelectedCluster(null)
-                } else if (selectedZone) {
-                  setSelectedZone(null)
-                } else {
-                  handleReset()
-                }
-              }}
-              className="rounded-2xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
-            >
-              ← Quay lại
-            </button>
-            {selectedSlot !== null && currentCluster && (
+            <div className="mt-5 text-right">
               <button
                 type="button"
-                onClick={handleConfirm}
-                disabled={!hasTicketId || confirmed}
-                className="flex-1 rounded-2xl bg-emerald-600 px-4 py-3.5 text-sm font-bold text-white hover:bg-emerald-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => setShowFloorModal(false)}
+                className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100"
               >
-                ✔ Xác nhận ô {currentCluster.id}.{selectedSlot}
-              </button>
-            )}
-          </div>
-        </div>
-    </ScreenFrame>
-  )
-}
-
-/* =========================================================================
-   5. TRA CỨU VỊ TRÍ XE (CHECK-POSITION SCREEN)
-   ========================================================================= */
-function getRoutePoints(clusterId?: string) {
-  const zone = clusterId?.charAt(0) || 'A'
-  const clusterNumber = Math.min(6, Math.max(1, Number.parseInt(clusterId?.slice(1) || '1', 10)))
-  const column = (clusterNumber - 1) % 3
-  const secondRow = clusterNumber > 3
-  const isRightSide = zone === 'B' || zone === 'D'
-  const isBottomZone = zone === 'C' || zone === 'D'
-  const targetX = (isRightSide ? 60 : 10) + column * 15
-  const targetY = (isBottomZone ? 64 : 17) + (secondRow ? 19 : 0)
-
-  // Route starts at the exit on the right, follows the aisle, then enters the selected cluster.
-  return `100,50 96,50 96,${targetY} ${targetX},${targetY}`
-}
-
-function CheckPositionScreen() {
-  const [cardScanned, setCardScanned] = useState(false)
-  const [ticketId, setTicketId] = useState('P-0502')
-  const [carPosition, setCarPosition] = useState<any>(null)
-  const [loading, setLoading] = useState(false)
-  const [defaultEntryTime] = useState(() => new Date(Date.now() - 60 * 60 * 1000).toLocaleTimeString('vi-VN'))
-
-  const handleScanCard = async () => {
-    setLoading(true)
-    try {
-      const response = await parkingAPI.getPositionByTicket(ticketId)
-      const isDefaultTicket = ticketId.trim().toUpperCase() === 'P-0502'
-      const hasMissingTicketDetails = !response?.licensePlate || response.licensePlate === 'N/A' || !response?.entryTime || response.entryTime === 'N/A'
-
-      setCarPosition(
-        isDefaultTicket && hasMissingTicketDetails
-          ? {
-              ...response,
-              floor: 'B2',
-              zone: 'A',
-              cluster: 'A6',
-              slot: 'A6.20',
-              licensePlate: '52-F1 888.88',
-              entryTime: defaultEntryTime,
-            }
-          : response
-      )
-      setCardScanned(true)
-    } catch (error) {
-      console.error('Error fetching position:', error)
-      // Fallback: generate position based on ticket ID
-      const hash = ticketId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
-      const zones = ['A', 'B', 'C', 'D']
-      const zone = zones[hash % 4]
-      const cluster = (hash % 6) + 1
-      const slot = (hash % 20) + 1
-      
-      setCarPosition({
-        floor: 'B2',
-        zone: zone,
-        cluster: `${zone}${cluster}`,
-        slot: `${zone}${cluster}.${slot}`,
-        licensePlate: '52-F1 888.88',
-        entryTime: new Date().toLocaleTimeString('vi-VN')
-      })
-      setCardScanned(true)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <ScreenFrame title="Tra cứu vị trí xe đỗ bằng Thẻ (Check-Position)" subtitle="Kiosk tìm xe / Quẹt thẻ để hiện vị trí">
-      {!cardScanned ? (
-        <div className="my-8 flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-emerald-300 bg-emerald-50/40 p-8 text-center">
-          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-600 text-3xl text-white shadow-lg">
-            💳
-          </div>
-          <h3 className="mt-4 text-xl font-extrabold text-slate-900">VUI LÒNG QUẸT THẺ GỬI XE VÀO MÁY KIOSK</h3>
-          <p className="mt-1 max-w-md text-sm text-slate-600">
-            Đưa thẻ gửi xe lại gần vùng cảm biến hoặc nhập mã thẻ & bấm nút bên dưới để hệ thống định vị vị trí xe đỗ của bạn.
-          </p>
-          <input
-            type="text"
-            value={ticketId}
-            onChange={(e) => setTicketId(e.target.value.toUpperCase())}
-            placeholder="P-0502"
-            className="mt-4 px-4 py-2 border border-slate-300 rounded-lg text-center font-mono text-sm w-32"
-          />
-          <button
-            type="button"
-            onClick={handleScanCard}
-            disabled={loading}
-            className="mt-6 rounded-2xl bg-emerald-600 px-6 py-3.5 text-sm font-extrabold text-white shadow-lg transition hover:bg-emerald-700 active:scale-95 disabled:opacity-50"
-          >
-            {loading ? 'Đang tìm kiếm...' : 'QUẸT THẺ (GIẢ LẬP TRA CỨU)'}
-          </button>
-        </div>
-      ) : (
-        <div>
-          <div className="mb-6 rounded-2xl border border-emerald-400 bg-emerald-500 p-4 text-white shadow-md">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-emerald-100">KẾT QUẢ TRA CỨU THẺ {ticketId}</p>
-                <h3 className="text-lg font-extrabold">### Xe của bạn đang đỗ tại: TẦNG {carPosition?.floor || 'B2'} - KHU {carPosition?.zone || 'A'} - Cụm VỊ TRÍ {carPosition?.cluster || 'A1'} - Ô VỊ TRÍ {carPosition?.slot || 'A1.1'}</h3>
-                <p className="text-xs text-emerald-100 mt-0.5">Biển số: <strong>{carPosition?.licensePlate || '52-F1 888.88'}</strong> | Thời gian gửi: {carPosition?.entryTime || '16:20:10'}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setCardScanned(false)}
-                className="rounded-xl border border-white/40 bg-white/20 px-3 py-2 text-xs font-bold text-white hover:bg-white/30"
-              >
-                Quẹt thẻ khác ↺
+                Hủy bỏ
               </button>
             </div>
-          </div>
-
-          <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-            <div className="mb-5 text-center">
-              <h3 className="text-3xl font-black tracking-tight text-slate-900">TẦNG B2</h3>
-              <p className="mt-1 text-xs font-medium text-slate-500">Sơ đồ tổng quan phân khu A - B - C - D</p>
-            </div>
-
-            <div className="relative mx-auto max-w-4xl">
-              <div className="grid gap-4 md:grid-cols-2">
-              {['A', 'B', 'C', 'D'].map((zone) => {
-                const isAvailableZone = zone === 'A' || zone === 'C'
-                return (
-                  <div key={zone} className={`relative rounded-3xl border p-4 ${isAvailableZone ? 'border-slate-300' : 'border-rose-200'}`}>
-                    <h4 className="mb-3 text-center text-2xl font-black text-slate-900">{zone}</h4>
-                    <div className="grid grid-cols-3 gap-2.5">
-                      {Array.from({ length: 6 }).map((_, index) => {
-                        const cluster = `${zone}${index + 1}`
-                        const hasCarCluster = cluster === carPosition?.cluster
-                        return (
-                          <div
-                            key={cluster}
-                            title={`Cụm ${cluster}${hasCarCluster ? ' — xe của bạn' : ''}`}
-                            className={`flex h-14 items-center justify-center rounded-xl text-sm font-extrabold shadow-sm sm:h-16 ${
-                              hasCarCluster
-                                ? 'border-2 border-amber-300 bg-slate-900 text-white ring-4 ring-amber-200'
-                                : isAvailableZone
-                                ? 'bg-emerald-500 font-mono text-white'
-                                : 'bg-rose-500 text-white'
-                            }`}
-                          >
-                            {hasCarCluster ? <span>🚗 {cluster}</span> : isAvailableZone ? '5/20' : ''}
-                          </div>
-                        )
-                      })}
-                    </div>
-
-                  </div>
-                )
-              })}
-              </div>
-              <svg
-                aria-label={`Đường đi tới cụm ${carPosition?.cluster || 'A1'}`}
-                className="pointer-events-none absolute inset-0 z-20 hidden h-full w-full lg:block"
-                viewBox="0 0 100 100"
-                preserveAspectRatio="none"
-              >
-                <defs>
-                  <marker id="route-arrow" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto">
-                    <path d="M 0 0 L 5 2.5 L 0 5 z" fill="#ef4444" />
-                  </marker>
-                </defs>
-                <polyline
-                  points={getRoutePoints(carPosition?.cluster)}
-                  fill="none"
-                  stroke="white"
-                  strokeWidth="2.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <polyline
-                  points={getRoutePoints(carPosition?.cluster)}
-                  fill="none"
-                  stroke="#ef4444"
-                  strokeWidth="1.25"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeDasharray="3 1.5"
-                  markerEnd="url(#route-arrow)"
-                />
-              </svg>
-              <div className="mt-4 flex flex-col items-center lg:absolute lg:-right-28 lg:top-1/2 lg:mt-0 lg:-translate-y-1/2">
-                <span className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-white bg-slate-900 text-xl text-white shadow-lg">🚶</span>
-                <span className="mt-1 rounded-full bg-slate-900 px-3 py-1.5 text-[10px] font-black text-white shadow">BẮT ĐẦU / LỐI RA</span>
-              </div>
-            </div>
-
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-5 text-xs font-semibold text-slate-600">
-              <span className="flex items-center gap-2"><span className="h-3.5 w-3.5 rounded bg-emerald-500" /> Cụm còn chỗ</span>
-              <span className="flex items-center gap-2"><span className="h-3.5 w-3.5 rounded bg-rose-500" /> Cụm đã đầy</span>
-              <span className="flex items-center gap-2"><span className="h-3.5 w-3.5 rounded bg-slate-900" /> Vị trí xe</span>
-            </div>
-          </section>
-
-          <div className="rounded-2xl border-2 border-emerald-500 bg-white p-5 shadow-lg">
-            <div className="mb-4 flex items-center justify-between border-b border-emerald-100 pb-3">
-              <div className="flex items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-600 text-xs font-bold text-white">{carPosition?.zone || 'A'}</span>
-                <h4 className="text-base font-extrabold text-emerald-900">KHU {carPosition?.zone || 'A'} - CHI TIẾT CỤM {carPosition?.cluster || 'A1'}</h4>
-              </div>
-              <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
-                Xe ở: {carPosition?.slot || 'A1.1'}
-              </span>
-            </div>
-
-            <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
-              {Array.from({ length: 20 }).map((_, i) => {
-                const slotNum = `${carPosition?.cluster || 'A1'}.${i + 1}`
-                const isCarSpot = slotNum === carPosition?.slot
-                
-                if (isCarSpot) {
-                  return (
-                    <div
-                      key={slotNum}
-                      className="flex flex-col items-center justify-center rounded-lg bg-emerald-600 p-2 text-white shadow-md ring-4 ring-emerald-300 animate-bounce"
-                    >
-                      <span className="text-lg">🚗</span>
-                      <span className="text-xs font-extrabold">{slotNum}</span>
-                    </div>
-                  )
-                }
-
-                return (
-                  <div
-                    key={slotNum}
-                    className="flex items-center justify-center rounded-lg bg-slate-100 p-2 text-xs font-bold text-slate-600 border border-slate-200"
-                  >
-                    {slotNum}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-500">📍 VỊ TRÍ HIỆN TẠI</p>
-            <p className="text-base font-bold text-slate-900">Điểm bắt đầu / lối ra tầng {carPosition?.floor || 'B2'} — giữa khu B và khu D</p>
-            <p className="mt-1 text-xs text-slate-600">
-              <strong>Hướng dẫn:</strong> Bắt đầu từ ký hiệu 🚶 giữa khu B và D → đi tới khu {carPosition?.zone || 'A'} → cụm {carPosition?.cluster || 'A1'} → ô {carPosition?.slot || 'A1.1'}.
-            </p>
           </div>
         </div>
       )}
@@ -902,26 +531,763 @@ function CheckPositionScreen() {
   )
 }
 
-/* =========================================================================
-   5. LUỒNG THANH TOÁN TƯƠNG TÁC (PAYMENT SCREEN)
-   ========================================================================= */
-type CheckoutStep = 'tap_card' | 'pay' | 'success'
-
-function PaymentScreen() {
-  const [step, setStep] = useState<CheckoutStep>('tap_card')
-  const [method, setMethod] = useState<'qr' | 'card'>('qr')
-  const [ticketId, setTicketId] = useState('P-0502')
+function FloorMapScreen({
+  floors,
+  currentFloorId,
+  onNavigateToOverview,
+  onNavigateToSavePosition,
+  onNavigateToCheckPosition,
+}: {
+  floors: FloorDetail[]
+  currentFloorId: FloorId
+  onNavigateToOverview: () => void
+  onNavigateToSavePosition: () => void
+  onNavigateToCheckPosition: () => void
+}) {
+  const currentFloor = floors.find((f) => f.id === currentFloorId) || floors[1]
 
   return (
-    <ScreenFrame title="Luồng Thanh toán & Rời bãi xe" subtitle="Kiosk Cổng ra / Tương tác trả thẻ -> Thanh toán -> Barie mở">
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-xl sm:p-7">
+      <div className="mb-6 border-b border-slate-200 pb-4">
+        <span className="inline-block rounded-md bg-emerald-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-emerald-800">
+          BÃI XE / KHU VỰC VÀ CHỖ TRỐNG
+        </span>
+        <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+          Sơ đồ chi tiết tầng
+        </h2>
+      </div>
+
+      <div className="rounded-3xl border border-slate-200/80 bg-slate-50/40 p-6 shadow-inner">
+        <div className="text-center mb-6">
+          <h3 className="text-3xl font-extrabold tracking-tight text-slate-900">
+            {currentFloor.name.toUpperCase()}
+          </h3>
+          <p className="text-xs text-slate-500 font-medium mt-1">
+            Sơ đồ chi tiết khu vực A - B - C - D
+          </p>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-2">
+          {currentFloor.zones.map((zone) => (
+            <div
+              key={zone.id}
+              className="rounded-3xl border border-slate-200 bg-white p-5 shadow-xs"
+            >
+              <h4 className="text-xl font-extrabold text-slate-900 text-center mb-4">
+                {zone.id}
+              </h4>
+
+              <div className="grid grid-cols-3 gap-3">
+                {zone.blocks.map((block) => {
+                  const isFull = block.available === 0
+
+                  return (
+                    <div
+                      key={block.id}
+                      onClick={onNavigateToSavePosition}
+                      className={`flex h-14 cursor-pointer flex-col items-center justify-center rounded-2xl text-xs font-extrabold transition shadow-xs hover:scale-105 ${
+                        isFull
+                          ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                          : 'bg-emerald-100 text-emerald-900 border border-emerald-200 hover:bg-emerald-200/80'
+                      }`}
+                    >
+                      <span>{block.available}/{block.capacity}</span>
+                      <span className="text-[9px] font-medium opacity-80">{block.id}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-3.5 text-center text-xs font-bold text-slate-700 shadow-xs flex items-center justify-center gap-2">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-800 text-xs">
+            ℹ
+          </span>
+          <span>YOU ARE HERE (Vị trí của bạn)</span>
+        </div>
+
+        <div className="mt-4 flex items-center justify-center gap-6 text-xs font-semibold text-slate-600">
+          <span className="flex items-center gap-2">
+            <span className="h-3 w-4 rounded-md bg-emerald-200 border border-emerald-300" /> Còn trống
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="h-3 w-4 rounded-md bg-rose-200 border border-rose-300" /> Đã đầy
+          </span>
+        </div>
+
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={onNavigateToOverview}
+            className="rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-xs font-bold text-slate-700 shadow-xs hover:bg-slate-100"
+          >
+            ← Quay về tổng quan
+          </button>
+          <button
+            type="button"
+            onClick={onNavigateToSavePosition}
+            className="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white shadow hover:bg-emerald-700"
+          >
+            Lưu vị trí xe →
+          </button>
+          <button
+            type="button"
+            onClick={onNavigateToCheckPosition}
+            className="rounded-xl border border-emerald-500 bg-white px-5 py-2.5 text-xs font-bold text-emerald-800 shadow-xs hover:bg-emerald-50"
+          >
+            Tra cứu vị trí
+          </button>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function SavePositionScreen({
+  floors,
+  currentFloorId,
+  activeTicket,
+  onSaveBlock,
+  onNavigateToCheckPosition,
+}: {
+  floors: FloorDetail[]
+  currentFloorId: FloorId
+  activeTicket: ActiveTicket | null
+  onSaveBlock: (ticketId: string, floorId: FloorId, zoneId: ZoneId, blockId: string) => Promise<void>
+  onNavigateToCheckPosition: () => void
+}) {
+  const currentFloor = floors.find((f) => f.id === currentFloorId) || floors[0]
+  const [selectedZoneId, setSelectedZoneId] = useState<ZoneId>('C')
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(activeTicket?.blockId || null)
+  const [isSaving, setIsSaving] = useState(false)
+
+  const isAlreadySaved = Boolean(activeTicket?.blockId)
+  const activeZone = currentFloor.zones.find((z) => z.id === selectedZoneId) || currentFloor.zones[0]
+
+  const handleSelectBlock = (block: Block) => {
+    if (isAlreadySaved) return
+    if (block.available === 0) return
+    setSelectedBlockId(block.id)
+  }
+
+  const handleConfirmSaveBlock = async () => {
+    if (!selectedBlockId || isSaving || isAlreadySaved) return
+    setIsSaving(true)
+    try {
+      const ticketToUse = activeTicket || INITIAL_TICKETS[0]
+      await onSaveBlock(ticketToUse.id, currentFloor.id, selectedZoneId, selectedBlockId)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <ScreenFrame title={`Lưu vị trí đỗ xe — ${currentFloor.name}`} subtitle="Chọn Phân khu & Block để ghi nhận vị trí đỗ">
+      {activeTicket && (
+        <div className={`mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4 text-xs font-bold ${
+          isAlreadySaved
+            ? 'border-emerald-400 bg-emerald-50 text-emerald-950 shadow-sm'
+            : 'border-emerald-300 bg-emerald-50/70 text-emerald-900'
+        }`}>
+          <div>
+            <p className="text-sm font-black">
+              Xe đang gửi: {activeTicket.licensePlate} ({activeTicket.carModel})
+            </p>
+            <p className="mt-0.5 text-emerald-700 font-medium">
+              Mã vé: <strong className="font-mono">{activeTicket.id}</strong> | Tầng đăng ký: <strong className="text-slate-900">{activeTicket.floorId}</strong>
+            </p>
+          </div>
+          {isAlreadySaved ? (
+            <span className="rounded-full bg-emerald-600 px-3.5 py-1.5 text-white font-black text-xs shadow-xs">
+              ✓ ĐÃ LƯU TẠI BLOCK {activeTicket.blockId}
+            </span>
+          ) : (
+            <span className="rounded-full bg-emerald-200 px-3 py-1 text-emerald-950 font-bold">
+              Vui lòng chọn Block bên dưới và bấm xác nhận
+            </span>
+          )}
+        </div>
+      )}
+
+      {isAlreadySaved && (
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-emerald-500 bg-emerald-100/70 p-4 text-xs font-bold text-emerald-950">
+          <span>
+            🔒 <strong>VỊ TRÍ ĐÃ ĐƯỢC GHI NHẬN:</strong> Vé {activeTicket?.id} ({activeTicket?.licensePlate}) đã lưu tại <strong>{currentFloor.name} • Block {activeTicket?.blockId}</strong>. Mỗi xe lưu 1 vị trí.
+          </span>
+          <button
+            type="button"
+            onClick={onNavigateToCheckPosition}
+            className="rounded-xl bg-emerald-700 px-4 py-2 text-white hover:bg-emerald-800 shadow"
+          >
+            Tra cứu vị trí xe →
+          </button>
+        </div>
+      )}
+
+      <div className="mb-5">
+        <p className="text-xs font-black uppercase tracking-wider text-slate-600 mb-2">
+          Bước 1: Chọn Phân khu:
+        </p>
+        <div className="grid grid-cols-4 gap-3">
+          {(['A', 'B', 'C', 'D'] as ZoneId[]).map((zId) => {
+            const isSelected = zId === selectedZoneId
+            const zone = currentFloor.zones.find((z) => z.id === zId)
+            let freeInZone = 0
+            zone?.blocks.forEach((b) => {
+              freeInZone += b.available
+            })
+
+            return (
+              <button
+                key={zId}
+                type="button"
+                disabled={isAlreadySaved}
+                onClick={() => {
+                  setSelectedZoneId(zId)
+                  setSelectedBlockId(null)
+                }}
+                className={`flex flex-col items-center justify-center rounded-2xl p-3.5 text-center transition border shadow-xs ${
+                  isAlreadySaved
+                    ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                    : isSelected
+                    ? 'bg-slate-900 text-white border-slate-900 shadow-md ring-4 ring-slate-200'
+                    : 'bg-white text-slate-900 border-slate-200 hover:border-slate-400'
+                }`}
+              >
+                <span className="text-lg font-black">Khu {zId}</span>
+                <span className={`text-[11px] font-semibold mt-0.5 ${isSelected && !isAlreadySaved ? 'text-emerald-300' : 'text-slate-500'}`}>
+                  Còn {freeInZone}/120 chỗ
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="rounded-3xl border-2 border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-200 pb-3 mb-4">
+          <div>
+            <h3 className="text-base font-black text-slate-900">
+              Bước 2: Chọn Block đỗ xe trong Phân khu {selectedZoneId}
+            </h3>
+            <p className="text-xs text-slate-500">
+              {isAlreadySaved
+                ? '(Vị trí đã được lưu và khóa cố định)'
+                : 'Click vào một Block màu xanh để xác nhận vị trí'}
+            </p>
+          </div>
+          <div className="flex items-center gap-4 text-xs font-bold text-slate-600">
+            <span className="flex items-center gap-1.5">
+              <span className="h-3 w-3 rounded-xs bg-emerald-500" /> Còn chỗ
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-3 w-3 rounded-xs bg-rose-500" /> Đã đầy
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {activeZone.blocks.map((block) => {
+            const isFull = block.available === 0
+            const isChosen = (activeTicket?.blockId || selectedBlockId) === block.id
+
+            return (
+              <button
+                key={block.id}
+                type="button"
+                disabled={isFull || isAlreadySaved}
+                onClick={() => handleSelectBlock(block)}
+                className={`flex h-24 flex-col items-center justify-center rounded-2xl p-4 text-center transition border shadow-xs ${
+                  isAlreadySaved && isChosen
+                    ? 'bg-emerald-700 text-white border-emerald-700 shadow-md ring-4 ring-emerald-200'
+                    : isAlreadySaved
+                    ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed opacity-60'
+                    : isFull
+                    ? 'bg-rose-50 border-rose-300 text-rose-700 cursor-not-allowed'
+                    : isChosen
+                    ? 'bg-emerald-600 border-2 border-slate-900 text-white shadow-lg scale-102 ring-4 ring-emerald-200'
+                    : 'bg-emerald-50/60 border-emerald-300 text-slate-900 hover:bg-emerald-500 hover:text-white'
+                }`}
+              >
+                <span className="text-xl font-black">{block.name}</span>
+                <span className={`text-xs font-bold mt-1 ${isChosen ? 'text-emerald-100' : isFull ? 'text-rose-600' : 'text-emerald-700'}`}>
+                  {isFull ? 'ĐÃ ĐẦY' : `Còn ${block.available}/${block.capacity} chỗ`}
+                </span>
+                <span className="text-[10px] mt-0.5 opacity-80">
+                  {isAlreadySaved && isChosen
+                    ? '✓ Xe đỗ tại đây'
+                    : isChosen
+                    ? '✓ Đang chọn'
+                    : isFull
+                    ? 'Hết chỗ'
+                    : 'Nhấn để chọn'}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-slate-50 border border-slate-200 p-4">
+          <div>
+            <p className="text-xs text-slate-500 font-medium">Vị trí Block:</p>
+            <p className="text-base font-black text-slate-900">
+              {activeTicket?.blockId ? (
+                <span className="text-emerald-700 font-mono text-lg">
+                  {currentFloor.name} • Khu {activeTicket.zoneId || selectedZoneId} • Block {activeTicket.blockId} (Đã lưu ✔)
+                </span>
+              ) : selectedBlockId ? (
+                <span className="text-emerald-700 font-mono text-lg">
+                  {currentFloor.name} • Khu {selectedZoneId} • Block {selectedBlockId}
+                </span>
+              ) : (
+                <span className="text-slate-400 font-normal text-sm">Chưa chọn block nào</span>
+              )}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            disabled={!selectedBlockId || isSaving || isAlreadySaved}
+            onClick={handleConfirmSaveBlock}
+            className={`rounded-2xl px-6 py-3.5 text-sm font-black shadow-lg transition ${
+              isAlreadySaved
+                ? 'bg-slate-300 text-slate-600 cursor-not-allowed'
+                : selectedBlockId && !isSaving
+                ? 'bg-emerald-600 text-white hover:bg-emerald-700 active:scale-95'
+                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+            }`}
+          >
+            {isAlreadySaved
+              ? `✓ ĐÃ LƯU VỊ TRÍ (BLOCK ${activeTicket?.blockId})`
+              : isSaving
+              ? 'Đang lưu...'
+              : 'LƯU VỊ TRÍ BLOCK NÀY ✔'}
+          </button>
+        </div>
+      </div>
+    </ScreenFrame>
+  )
+}
+
+function CheckPositionScreen({
+  tickets,
+  onNavigateToPayment,
+}: {
+  tickets: ActiveTicket[]
+  onNavigateToPayment: (ticket: ActiveTicket) => void
+}) {
+  const [selectedTicketId, setSelectedTicketId] = useState<string>(tickets[0]?.id || '#P-8821')
+  const [cardScanned, setCardScanned] = useState(true)
+
+  const activeTicket = tickets.find((t) => t.id === selectedTicketId) || tickets[0]
+  const targetZone = activeTicket?.zoneId || 'A'
+  const targetBlock = activeTicket?.blockId || 'A1'
+
+  // Helper tính toán đường đi nét đứt thông minh (Aisle-based Smart Wayfinding) qua hành lang chính
+  const getNavigationPath = (zone: ZoneId, block: string) => {
+    const colXLeft: Record<number, number> = {
+      0: 100, // Cột 1 (A1/A4, C1/C4)
+      1: 245, // Cột 2 (A2/A5, C2/C5)
+      2: 390, // Cột 3 (A3/A6, C3/C6)
+    }
+    const colXRight: Record<number, number> = {
+      0: 610, // Cột 1 (B1/B4, D1/D4)
+      1: 755, // Cột 2 (B2/B5, D2/D5)
+      2: 900, // Cột 3 (B3/B6, D3/D6)
+    }
+
+    const blockNum = parseInt(block.replace(/\D/g, ''), 10) || 1
+    const isRow1 = blockNum <= 3
+    const colIndex = (blockNum - 1) % 3
+
+    if (zone === 'A') {
+      const targetX = colXLeft[colIndex] || 100
+      if (isRow1) {
+        // Đi theo hành lang trung tâm -> rẽ lên trục giữa -> rẽ trái vào hàng 1
+        return `M 980 300 L 515 300 Q 490 300 490 275 L 490 120 Q 490 100 465 100 L ${targetX} 100`
+      } else {
+        // Hàng 2: Đi thẳng hành lang giữa -> rẽ lên thẳng ô xe đỗ
+        return `M 980 300 L ${targetX + 35} 300 Q ${targetX} 300 ${targetX} 275 L ${targetX} 210`
+      }
+    } else if (zone === 'B') {
+      const targetX = colXRight[colIndex] || 610
+      if (isRow1) {
+        // Đi thẳng hành lang giữa -> rẽ lên hành lang phải -> rẽ trái vào hàng 1
+        return `M 980 300 L 935 300 Q 910 300 910 275 L 910 120 Q 910 100 885 100 L ${targetX} 100`
+      } else {
+        // Hàng 2: Rẽ lên từ hành lang giữa
+        return `M 980 300 L ${targetX + 35} 300 Q ${targetX} 300 ${targetX} 275 L ${targetX} 210`
+      }
+    } else if (zone === 'C') {
+      const targetX = colXLeft[colIndex] || 100
+      if (isRow1) {
+        // Hàng 1 khu C: Đi hành lang giữa -> rẽ xuống ô
+        return `M 980 300 L ${targetX + 35} 300 Q ${targetX} 300 ${targetX} 325 L ${targetX} 390`
+      } else {
+        // Hàng 2 khu C: Đi hành lang giữa -> rẽ xuống trục giữa -> rẽ trái vào hàng 2
+        return `M 980 300 L 515 300 Q 490 300 490 325 L 490 480 Q 490 500 465 500 L ${targetX} 500`
+      }
+    } else {
+      // Khu D
+      const targetX = colXRight[colIndex] || 610
+      if (isRow1) {
+        return `M 980 300 L ${targetX + 35} 300 Q ${targetX} 300 ${targetX} 325 L ${targetX} 390`
+      } else {
+        return `M 980 300 L 935 300 Q 910 300 910 325 L 910 480 Q 910 500 885 500 L ${targetX} 500`
+      }
+    }
+  }
+
+  const navRoutePath = getNavigationPath(targetZone as ZoneId, targetBlock)
+
+  const handleScan = (tId: string) => {
+    setSelectedTicketId(tId)
+    setCardScanned(true)
+  }
+
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-xl sm:p-7">
+      <div className="mb-6 border-b border-slate-200 pb-4">
+        <span className="inline-block rounded-md bg-emerald-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-emerald-800">
+          KIOSK TÌM XE / QUẸT THẺ ĐỂ HIỆN VỊ TRÍ
+        </span>
+        <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+          Tra cứu vị trí xe đỗ bằng Thẻ (Check-Position)
+        </h2>
+      </div>
+
+      {!cardScanned ? (
+        <div className="my-8 flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-emerald-300 bg-emerald-50/40 p-8 text-center">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-600 text-3xl text-white shadow-lg">
+            💳
+          </div>
+          <h3 className="mt-4 text-xl font-extrabold text-slate-900">VUI LÒNG QUẸT THẺ GỬI XE VÀO ĐẦU ĐỌC KIOSK</h3>
+          <p className="mt-1 max-w-md text-sm text-slate-600">
+            Chọn một trong các thẻ đang có trong hệ thống để tra cứu vị trí:
+          </p>
+
+          <div className="mt-5 flex flex-wrap justify-center gap-2 max-w-lg">
+            {tickets.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => handleScan(t.id)}
+                className="flex items-center gap-2 rounded-xl border border-emerald-400 bg-white px-4 py-2.5 text-xs font-bold text-emerald-900 shadow-sm hover:bg-emerald-600 hover:text-white transition active:scale-95"
+              >
+                <span>💳 {t.id}</span>
+                <span className="font-mono font-normal">({t.licensePlate} • {t.floorId} • Block {t.blockId || 'A1'})</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : activeTicket ? (
+        <div className="space-y-6">
+          {/* TOP GREEN BANNER */}
+          <div className="rounded-2xl bg-emerald-500 p-5 text-white shadow-md">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-emerald-100">
+                  KẾT QUẢ TRA CỨU THẺ {activeTicket.id}
+                </p>
+                <h3 className="mt-1 text-xl font-extrabold sm:text-2xl">
+                  Xe của bạn đang đỗ tại: {activeTicket.floorId} - KHU {targetZone} - Cụm VỊ TRÍ {targetBlock}
+                </h3>
+                <p className="mt-1 text-xs text-emerald-100">
+                  Biển số: <strong className="text-white font-mono">{activeTicket.licensePlate}</strong> | Thời gian gửi: {new Date(activeTicket.entryTime).toLocaleTimeString('vi-VN')}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCardScanned(false)}
+                  className="rounded-xl border border-white/40 bg-white/20 px-3.5 py-2 text-xs font-bold text-white shadow-sm hover:bg-white/30 transition"
+                >
+                  Quẹt thẻ khác ↺
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onNavigateToPayment(activeTicket)}
+                  className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-black text-white shadow hover:bg-black transition"
+                >
+                  Thanh toán & rời bãi →
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* MAIN FLOOR MAP WITH VISUAL NAVIGATION ROUTE */}
+          <div className="relative rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-6 text-center">
+              <h3 className="text-3xl font-black tracking-tight text-slate-900 sm:text-4xl" style={{ fontFamily: '"Space Grotesk", sans-serif' }}>
+                {activeTicket.floorId === 'B2' ? 'TẦNG B2' : `TẦNG ${activeTicket.floorId}`}
+              </h3>
+              <p className="mt-1 text-xs font-medium text-slate-500">
+                Sơ đồ tổng quan phân khu A - B - C - D
+              </p>
+            </div>
+
+            {/* 2x2 Grid of Zones (A, B, C, D) Container */}
+            <div className="relative mx-auto max-w-4xl">
+              <div className="grid gap-6 md:grid-cols-2">
+                {/* ZONE A */}
+                <div className={`rounded-3xl border-2 p-5 transition ${targetZone === 'A' ? 'border-slate-300 bg-white shadow-sm' : 'border-slate-200 bg-white'}`}>
+                  <h4 className="mb-4 text-center text-2xl font-black text-slate-900">A</h4>
+                  <div className="grid grid-cols-3 gap-3">
+                    {['A1', 'A2', 'A3', 'A4', 'A5', 'A6'].map((bId) => {
+                      const isCarBlock = targetZone === 'A' && targetBlock === bId
+                      return (
+                        <div
+                          key={bId}
+                          className={`flex h-16 flex-col items-center justify-center rounded-2xl text-xs font-extrabold transition shadow-xs sm:h-20 ${
+                            isCarBlock
+                              ? 'bg-slate-950 text-white ring-4 ring-amber-400 scale-105 z-10 animate-pulse'
+                              : 'bg-emerald-500 text-white'
+                          }`}
+                        >
+                          {isCarBlock ? (
+                            <>
+                              <span className="text-base">🚗</span>
+                              <span className="font-mono text-sm font-black">{bId}</span>
+                            </>
+                          ) : (
+                            <span className="text-sm font-bold">5/20</span>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* ZONE B */}
+                <div className={`rounded-3xl border-2 p-5 transition ${targetZone === 'B' ? 'border-slate-300 bg-white shadow-sm' : 'border-slate-200 bg-white'}`}>
+                  <h4 className="mb-4 text-center text-2xl font-black text-slate-900">B</h4>
+                  <div className="grid grid-cols-3 gap-3">
+                    {['B1', 'B2', 'B3', 'B4', 'B5', 'B6'].map((bId) => {
+                      const isCarBlock = targetZone === 'B' && targetBlock === bId
+                      return (
+                        <div
+                          key={bId}
+                          className={`flex h-16 flex-col items-center justify-center rounded-2xl text-xs font-extrabold transition shadow-xs sm:h-20 ${
+                            isCarBlock
+                              ? 'bg-slate-950 text-white ring-4 ring-amber-400 scale-105 z-10 animate-pulse'
+                              : 'bg-rose-500 text-white'
+                          }`}
+                        >
+                          {isCarBlock ? (
+                            <>
+                              <span className="text-base">🚗</span>
+                              <span className="font-mono text-sm font-black">{bId}</span>
+                            </>
+                          ) : (
+                            <span className="text-sm font-bold">0/20</span>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* ZONE C */}
+                <div className={`rounded-3xl border-2 p-5 transition ${targetZone === 'C' ? 'border-slate-300 bg-white shadow-sm' : 'border-slate-200 bg-white'}`}>
+                  <h4 className="mb-4 text-center text-2xl font-black text-slate-900">C</h4>
+                  <div className="grid grid-cols-3 gap-3">
+                    {['C1', 'C2', 'C3', 'C4', 'C5', 'C6'].map((bId) => {
+                      const isCarBlock = targetZone === 'C' && targetBlock === bId
+                      return (
+                        <div
+                          key={bId}
+                          className={`flex h-16 flex-col items-center justify-center rounded-2xl text-xs font-extrabold transition shadow-xs sm:h-20 ${
+                            isCarBlock
+                              ? 'bg-slate-950 text-white ring-4 ring-amber-400 scale-105 z-10 animate-pulse'
+                              : 'bg-emerald-500 text-white'
+                          }`}
+                        >
+                          {isCarBlock ? (
+                            <>
+                              <span className="text-base">🚗</span>
+                              <span className="font-mono text-sm font-black">{bId}</span>
+                            </>
+                          ) : (
+                            <span className="text-sm font-bold">5/20</span>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* ZONE D */}
+                <div className={`rounded-3xl border-2 p-5 transition ${targetZone === 'D' ? 'border-slate-300 bg-white shadow-sm' : 'border-slate-200 bg-white'}`}>
+                  <h4 className="mb-4 text-center text-2xl font-black text-slate-900">D</h4>
+                  <div className="grid grid-cols-3 gap-3">
+                    {['D1', 'D2', 'D3', 'D4', 'D5', 'D6'].map((bId) => {
+                      const isCarBlock = targetZone === 'D' && targetBlock === bId
+                      return (
+                        <div
+                          key={bId}
+                          className={`flex h-16 flex-col items-center justify-center rounded-2xl text-xs font-extrabold transition shadow-xs sm:h-20 ${
+                            isCarBlock
+                              ? 'bg-slate-950 text-white ring-4 ring-amber-400 scale-105 z-10 animate-pulse'
+                              : 'bg-rose-500 text-white'
+                          }`}
+                        >
+                          {isCarBlock ? (
+                            <>
+                              <span className="text-base">🚗</span>
+                              <span className="font-mono text-sm font-black">{bId}</span>
+                            </>
+                          ) : (
+                            <span className="text-sm font-bold">0/20</span>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* VISUAL NAVIGATION PATH (SMART AISLE-BASED DUAL-LAYER GPS LINE) */}
+              <svg
+                viewBox="0 0 1000 600"
+                preserveAspectRatio="none"
+                className="pointer-events-none absolute inset-0 h-full w-full overflow-visible z-20"
+                style={{ filter: 'drop-shadow(0 2px 4px rgba(244,63,94,0.3))' }}
+              >
+                <defs>
+                  <marker
+                    id="route-arrow"
+                    viewBox="0 0 10 10"
+                    refX="1.5"
+                    refY="5"
+                    markerWidth="6.5"
+                    markerHeight="6.5"
+                    orient="auto-start-reverse"
+                  >
+                    <path d="M 10 1 L 1 5 L 10 9 Z" fill="#f43f5e" />
+                  </marker>
+                </defs>
+                <style>{`
+                  @keyframes navFlow {
+                    to {
+                      stroke-dashoffset: -26;
+                    }
+                  }
+                  .animated-nav-dash {
+                    animation: navFlow 0.9s linear infinite;
+                  }
+                `}</style>
+                {/* 1. Sleek Red Ribbon Base Body */}
+                <path
+                  d={navRoutePath}
+                  fill="none"
+                  stroke="#f43f5e"
+                  strokeWidth="7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  markerEnd="url(#route-arrow)"
+                />
+                {/* 2. Inner White Dashed Highway GPS Line */}
+                <path
+                  d={navRoutePath}
+                  fill="none"
+                  stroke="#ffffff"
+                  strokeWidth="2"
+                  strokeDasharray="10 5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="animated-nav-dash"
+                />
+              </svg>
+
+              {/* YOU ARE HERE / STARTING POINT BADGE */}
+              <div className="absolute -right-3 top-1/2 -translate-y-1/2 translate-x-2 flex flex-col items-center z-30 sm:translate-x-6">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-900 text-white shadow-lg ring-4 ring-white">
+                  <span className="text-lg">🚶</span>
+                </div>
+                <span className="mt-1 rounded-full bg-slate-900 px-2.5 py-0.5 text-[10px] font-black tracking-wider text-white shadow-md whitespace-nowrap">
+                  BẮT ĐẦU / LỐI RA
+                </span>
+              </div>
+            </div>
+
+            {/* LEGEND */}
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-xs font-bold text-slate-700">
+              <span className="flex items-center gap-2">
+                <span className="h-4 w-4 rounded-md bg-emerald-500 shadow-xs" /> Cụm còn chỗ
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="h-4 w-4 rounded-md bg-rose-500 shadow-xs" /> Cụm đã đầy
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="h-4 w-4 rounded-md bg-slate-950 ring-2 ring-amber-400 shadow-xs" /> Vị trí xe
+              </span>
+            </div>
+          </div>
+
+          {/* BOTTOM INSTRUCTION CARD */}
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-xs">
+            <p className="text-xs font-bold uppercase tracking-wider text-rose-600">📍 VỊ TRÍ HIỆN TẠI</p>
+            <h4 className="mt-1 text-base font-extrabold text-slate-900">
+              Điểm bắt đầu / lối ra tầng {activeTicket.floorId} — giữa khu B và khu D
+            </h4>
+            <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">
+              <strong>Hướng dẫn:</strong> Bắt đầu từ ký hiệu 🚶 giữa khu B và D → đi tới khu {targetZone} → cụm {targetBlock}.
+            </p>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+type CheckoutStep = 'tap_card' | 'pay' | 'success'
+
+function PaymentScreen({
+  tickets,
+  onCheckoutAndRelease,
+  onNavigateToOverview,
+}: {
+  tickets: ActiveTicket[]
+  onCheckoutAndRelease: (ticketId: string, method: 'QR' | 'POS') => Promise<void>
+  onNavigateToOverview: () => void
+}) {
+  const [step, setStep] = useState<CheckoutStep>('tap_card')
+  const [selectedTicketId, setSelectedTicketId] = useState<string>(tickets[0]?.id || '#P-8821')
+  const [method, setMethod] = useState<'qr' | 'card'>('qr')
+  const [paidTicketInfo, setPaidTicketInfo] = useState<ActiveTicket | null>(null)
+  const [isProcessing, setIsProcessing] = useState(false)
+
+  const activeTicket = tickets.find((t) => t.id === selectedTicketId) || tickets[0]
+
+  const handleSelectTicketToPay = (tId: string) => {
+    setSelectedTicketId(tId)
+    setStep('pay')
+  }
+
+  const handleConfirmPayment = async () => {
+    if (!activeTicket || isProcessing) return
+    setIsProcessing(true)
+    try {
+      setPaidTicketInfo(activeTicket)
+      await onCheckoutAndRelease(activeTicket.id, method === 'qr' ? 'QR' : 'POS')
+      setStep('success')
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  return (
+    <ScreenFrame title="Thanh toán & Rời bãi xe" subtitle="Cổng ra / Trả thẻ & Thanh toán phí">
       <div className="mb-6 grid grid-cols-3 gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2 text-center text-xs font-bold">
         {[
-          ['1. Quẹt thẻ', 'tap_card'],
-          ['2. Thanh toán', 'pay'],
+          ['1. Quẹt thẻ gửi xe', 'tap_card'],
+          ['2. Thanh toán phí', 'pay'],
           ['3. Mở Barie', 'success'],
         ].map(([label, sId], idx) => {
           const isCurrent = step === sId
-          const stepOrder: CheckoutStep[] = ['tap_card', 'pay', 'success']
+          const stepOrder = ['tap_card', 'pay', 'success']
           const isPassed = stepOrder.indexOf(step) > idx
 
           return (
@@ -946,50 +1312,66 @@ function PaymentScreen() {
           <div className="flex h-20 w-20 items-center justify-center rounded-full bg-slate-900 text-3xl text-white shadow-lg">
             💳
           </div>
-          <h3 className="mt-4 text-xl font-extrabold text-slate-900">QUẸT THẺ GỬI XE TẠI KIOSK CỔNG RA</h3>
+          <h3 className="mt-4 text-xl font-extrabold text-slate-900">QUẸT THẺ GỬI XE TẠI ĐẦU ĐỌC CỔNG RA</h3>
           <p className="mt-1 max-w-md text-sm text-slate-600">
-            Quẹt hoặc thả thẻ gửi xe vào khe nhận thẻ để xem thông tin và thanh toán ngay.
+            Chọn thẻ cần thanh toán để hệ thống tính phí và mở barie:
           </p>
-          <label className="mt-5 w-full max-w-xs text-left text-xs font-bold uppercase tracking-wider text-slate-500">
-            Mã thẻ gửi xe
-            <input
-              type="text"
-              value={ticketId}
-              onChange={(event) => setTicketId(event.target.value.toUpperCase())}
-              placeholder="P-0502"
-              className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-center font-mono text-base font-extrabold text-slate-900 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-            />
-          </label>
-          <button
-            type="button"
-            onClick={() => setStep('pay')}
-            disabled={!ticketId.trim()}
-            className="mt-6 rounded-2xl bg-emerald-600 px-7 py-4 text-base font-extrabold text-white shadow-lg transition hover:bg-emerald-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            QUẸT THẺ ({ticketId || 'P-0502'}) →
-          </button>
+
+          <div className="mt-5 flex flex-wrap justify-center gap-2 max-w-lg">
+            {tickets.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => handleSelectTicketToPay(t.id)}
+                className="flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3.5 text-sm font-extrabold text-white shadow-lg transition hover:bg-emerald-700 active:scale-95"
+              >
+                <span>QUẸT THẺ {t.id}</span>
+                <span className="font-mono font-normal">({t.licensePlate} • {t.floorId} • Block {t.blockId || 'C4'})</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
-      {step === 'pay' && (
+      {step === 'pay' && activeTicket && (
         <div className="space-y-6">
           <div className="grid gap-6 lg:grid-cols-12">
             <div className="lg:col-span-5 flex flex-col justify-between rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
               <div>
                 <h3 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-3">Thông tin phiếu gửi xe</h3>
                 <div className="mt-4 space-y-3 text-sm">
-                  <div className="flex justify-between"><span className="text-slate-500">Mã thẻ:</span><span className="font-mono font-bold text-slate-900">{ticketId}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500">Biển số:</span><span className="font-mono font-bold text-emerald-700">52-F1 888.88</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500">Vị trí:</span><span className="font-semibold text-slate-800">Tầng B2 - Khu C (C4)</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500">Vào lúc:</span><span className="font-mono text-slate-700">16:20</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500">Ra lúc:</span><span className="font-mono text-slate-700">19:45</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500">Thời lượng:</span><span className="font-semibold text-slate-800">3h 25m</span></div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Mã thẻ:</span>
+                    <span className="font-mono font-bold text-slate-900">{activeTicket.id}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Biển số xe:</span>
+                    <span className="font-mono font-bold text-emerald-700">{activeTicket.licensePlate}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Phương tiện:</span>
+                    <span className="font-medium text-slate-800">{activeTicket.carModel}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Vị trí đỗ:</span>
+                    <span className="font-semibold text-slate-800">
+                      {activeTicket.floorId} - Khu {activeTicket.zoneId || 'C'} (Block {activeTicket.blockId || 'C4'})
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Thời gian vào:</span>
+                    <span className="font-mono text-slate-700">{new Date(activeTicket.entryTime).toLocaleTimeString('vi-VN')}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Thời gian ra:</span>
+                    <span className="font-mono text-slate-700">{new Date().toLocaleTimeString('vi-VN')}</span>
+                  </div>
                 </div>
               </div>
 
               <div className="mt-6 rounded-2xl bg-emerald-50 border border-emerald-200 p-4 text-center">
-                <p className="text-xs font-bold uppercase tracking-wider text-emerald-800">Tổng tiền</p>
-                <p className="mt-1 text-3xl font-black text-emerald-700 font-mono">4.000 VNĐ</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-emerald-800">Tổng tiền thanh toán</p>
+                <p className="mt-1 text-3xl font-black text-emerald-700 font-mono">{activeTicket.fee.toLocaleString()} VNĐ</p>
               </div>
             </div>
 
@@ -1000,44 +1382,44 @@ function PaymentScreen() {
                     type="button"
                     onClick={() => setMethod('qr')}
                     className={`flex-1 rounded-lg py-2.5 transition ${
-                      method === 'qr' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'
+                      method === 'qr' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    📱 QR Code
+                    📱 Quét mã QR
                   </button>
                   <button
                     type="button"
                     onClick={() => setMethod('card')}
                     className={`flex-1 rounded-lg py-2.5 transition ${
-                      method === 'card' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'
+                      method === 'card' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    💳 Thẻ POS
+                    💳 Chạm thẻ POS
                   </button>
                 </div>
 
                 {method === 'qr' && (
                   <div className="flex flex-col items-center justify-center rounded-2xl bg-white p-5 border border-slate-200 text-center">
-                    <p className="text-sm font-extrabold text-slate-900">Mở App quét mã này</p>
+                    <p className="text-sm font-extrabold text-slate-900">Quét mã QR để thanh toán</p>
                     <div className="my-3 flex items-center justify-center rounded-2xl border-2 border-dashed border-emerald-400 bg-emerald-50/50 p-4">
-                      <div className="w-44 rounded-xl border border-slate-300 bg-white p-3">
+                      <div className="w-44 rounded-xl border border-slate-300 bg-white p-3 text-center shadow-sm">
                         <div className="grid grid-cols-8 gap-1">
                           {Array.from({ length: 64 }).map((_, i) => (
-                            <div key={i} className={`h-2.5 rounded-[1px] ${i % 3 === 0 ? 'bg-slate-900' : 'bg-slate-100'}`} />
+                            <div key={i} className={`h-2.5 rounded-[1px] ${i % 3 === 0 || i % 5 === 0 ? 'bg-slate-900' : 'bg-slate-100'}`} />
                           ))}
                         </div>
-                        <p className="mt-2 font-mono text-[9px] font-bold text-slate-600">PARKING-4K</p>
+                        <p className="mt-2 font-mono text-[9px] font-bold text-slate-600">PARKING-PAY</p>
                       </div>
                     </div>
-                    <p className="text-xs text-slate-500">Số tiền: <strong>4.000 VNĐ</strong></p>
+                    <p className="text-xs text-slate-500 font-medium">Số tiền: <strong>{activeTicket.fee.toLocaleString()} VNĐ</strong></p>
                   </div>
                 )}
 
                 {method === 'card' && (
                   <div className="flex flex-col items-center justify-center rounded-2xl bg-white p-8 border border-slate-200 text-center">
                     <div className="text-4xl">💳</div>
-                    <p className="mt-3 text-base font-bold text-slate-900">CHẠM THẺ POS</p>
-                    <p className="mt-1 text-xs text-slate-500">Chạm thẻ Visa/ATM vào thiết bị POS</p>
+                    <p className="mt-3 text-base font-bold text-slate-900">CHẠM THẺ NGÂN HÀNG (POS)</p>
+                    <p className="mt-1 text-xs text-slate-500 max-w-xs">Chạm thẻ thanh toán vào đầu đọc POS bên cạnh màn hình.</p>
                   </div>
                 )}
               </div>
@@ -1046,16 +1428,19 @@ function PaymentScreen() {
                 <button
                   type="button"
                   onClick={() => setStep('tap_card')}
-                  className="rounded-2xl border border-slate-300 bg-white px-4 py-3.5 text-xs font-bold text-slate-700"
+                  className="rounded-2xl border border-slate-300 bg-white px-4 py-3.5 text-xs font-bold text-slate-700 hover:bg-slate-100"
                 >
-                  ← Quẹt khác
+                  ← Quẹt thẻ khác
                 </button>
                 <button
                   type="button"
-                  onClick={() => setStep('success')}
-                  className="flex-1 rounded-2xl bg-emerald-600 py-3.5 text-sm font-black text-white hover:bg-emerald-700"
+                  disabled={isProcessing}
+                  onClick={handleConfirmPayment}
+                  className={`flex-1 rounded-2xl py-3.5 text-sm font-black text-white shadow-lg transition active:scale-95 ${
+                    isProcessing ? 'bg-slate-400' : 'bg-emerald-600 hover:bg-emerald-700'
+                  }`}
                 >
-                  XÁC NHẬN & MỞ BARIE ✔
+                  {isProcessing ? 'Đang xử lý...' : 'XÁC NHẬN THANH TOÁN & MỞ BARIE ✔'}
                 </button>
               </div>
             </div>
@@ -1063,96 +1448,204 @@ function PaymentScreen() {
         </div>
       )}
 
-      {step === 'success' && (
+      {step === 'success' && paidTicketInfo && (
         <div className="rounded-3xl border border-emerald-300 bg-emerald-50 p-6 text-center">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-600 text-4xl text-white shadow-lg">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-600 text-3xl text-white shadow-lg">
             ✓
           </div>
           <h3 className="mt-4 text-2xl font-extrabold text-emerald-950">THANH TOÁN THÀNH CÔNG!</h3>
-          <p className="mt-1 text-sm text-emerald-800">Số tiền: <strong>4.000 VNĐ</strong> | Mã GD: TX-2026-00431</p>
+          <p className="mt-1 text-sm text-emerald-800">
+            Số tiền: <strong className="font-mono text-base">{paidTicketInfo.fee.toLocaleString()} VNĐ</strong> | Mã GD: TX-2026-{Math.floor(1000 + Math.random() * 9000)}
+          </p>
 
           <div className="my-6 rounded-2xl border-2 border-emerald-500 bg-emerald-600 p-4 text-white shadow-lg animate-pulse">
-            <p className="text-xl font-extrabold tracking-wide">🚧 CỔNG BARIE ĐÃ MỞ!</p>
+            <p className="text-xl font-extrabold tracking-wide">🚧 CỔNG BARIE ĐÃ MỞ - CHÚC QUÝ KHÁCH THƯỢNG LỘ BÌNH AN!</p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setStep('tap_card')}
-            className="rounded-xl bg-slate-900 px-6 py-3 text-xs font-bold text-white hover:bg-black"
-          >
-            Quay về
-          </button>
+          <div className="flex justify-center gap-3">
+            <button
+              type="button"
+              onClick={onNavigateToOverview}
+              className="rounded-xl bg-emerald-600 px-6 py-3 text-xs font-black text-white shadow hover:bg-emerald-700"
+            >
+              Xem tổng quan chỗ trống →
+            </button>
+            <button
+              type="button"
+              onClick={() => setStep('tap_card')}
+              className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-xs font-bold text-slate-700 shadow hover:bg-slate-100"
+            >
+              Thanh toán lượt khác
+            </button>
+          </div>
         </div>
       )}
     </ScreenFrame>
   )
 }
 
-/* =========================================================================
-   MAIN APP
-   ========================================================================= */
 export default function App() {
   const [activeScreen, setActiveScreen] = useState<Screen>('overview')
-  const [floors, setFloors] = useState<FloorDisplay[]>([])
-  const [loading, setLoading] = useState(true)
+  const [floors, setFloors] = useState<FloorDetail[]>(createInitialFloorDetails)
+  const [tickets, setTickets] = useState<ActiveTicket[]>(INITIAL_TICKETS)
+  const [currentFloorId, setCurrentFloorId] = useState<FloorId>('B2')
+  const [activeTicket, setActiveTicket] = useState<ActiveTicket | null>(null)
 
-  useEffect(() => {
-    const loadFloors = async () => {
-      try {
-        const data = await parkingAPI.getFloors()
-        const displayFloors: FloorDisplay[] = data.map((f) => ({
-          id: f.id,
-          name: f.name,
-          type: 'Xe máy',
-          used: f.occupied,
-          total: f.capacity,
-          status: getFloorStatus((f.occupied / f.capacity) * 100),
-        }))
-        setFloors(displayFloors)
-      } catch (error) {
-        console.error('Error loading floors:', error)
-        setFloors([
-          { id: 'B1', name: 'Tầng B1', type: 'Xe máy', used: 180, total: 480, status: 'ok' },
-          { id: 'B2', name: 'Tầng B2', type: 'Xe máy', used: 180, total: 480, status: 'ok' },
-          { id: 'B3', name: 'Tầng B3', type: 'Xe máy', used: 360, total: 480, status: 'warn' },
-          { id: 'B4', name: 'Tầng B4', type: 'Xe máy', used: 120, total: 480, status: 'ok' },
-          { id: 'B5', name: 'Tầng B5', type: 'Xe máy', used: 384, total: 480, status: 'warn' },
-          { id: 'B6', name: 'Tầng B6', type: 'Xe máy', used: 456, total: 480, status: 'full' },
-        ])
-      } finally {
-        setLoading(false)
-      }
+  const syncWithBackend = useCallback(async () => {
+    try {
+      await parkingAPI.health()
+    } catch {
+      // Offline fallback
     }
-    loadFloors()
   }, [])
 
-  const screenMap: Record<Screen, React.ReactNode> = {
-    overview: <OverviewScreen floors={floors} />,
-    ticket: <TicketScreen />,
-    floormap: <FloorMapScreen />,
-    saveposition: <SavePositionScreen />,
-    checkposition: <CheckPositionScreen />,
-    payment: <PaymentScreen />,
+  useEffect(() => {
+    syncWithBackend()
+  }, [syncWithBackend])
+
+  const handleIssueTicket = async (vehicle: MockCar, floorId: FloorId): Promise<ActiveTicket> => {
+    let generatedTicketId = `#P-${Math.floor(1000 + Math.random() * 9000)}`
+
+    try {
+      const car = await parkingAPI.checkInCar(vehicle.licensePlate)
+      if (car && car.id) {
+        const apiTicket = await parkingAPI.generateTicket(car.id, floorId)
+        if (apiTicket && apiTicket.id) {
+          generatedTicketId = apiTicket.id
+        }
+      }
+    } catch {
+      // Fallback
+    }
+
+    const newTicket: ActiveTicket = {
+      id: generatedTicketId,
+      licensePlate: vehicle.licensePlate,
+      carModel: vehicle.carModel,
+      entryTime: new Date(),
+      floorId,
+      fee: 4000,
+      status: 'PARKED',
+    }
+
+    setTickets((prev) => [newTicket, ...prev])
+    setActiveTicket(newTicket)
+    setCurrentFloorId(floorId)
+    return newTicket
+  }
+
+  const handleSaveBlock = async (
+    ticketId: string,
+    floorId: FloorId,
+    zoneId: ZoneId,
+    blockId: string
+  ) => {
+    try {
+      await parkingAPI.reserveParkingSlot({
+        zoneId,
+        clusterId: blockId,
+        slotNumber: 1,
+        ticketId,
+        floorId,
+      })
+    } catch {
+      // Fallback
+    }
+
+    setTickets((prev) =>
+      prev.map((t) =>
+        t.id === ticketId ? { ...t, floorId, zoneId, blockId } : t
+      )
+    )
+
+    setActiveTicket((prev) => (prev && prev.id === ticketId ? { ...prev, floorId, zoneId, blockId } : prev))
+
+    setFloors((prevFloors) =>
+      prevFloors.map((floor) => {
+        if (floor.id !== floorId) return floor
+        return {
+          ...floor,
+          zones: floor.zones.map((zone) => {
+            if (zone.id !== zoneId) return zone
+            return {
+              ...zone,
+              blocks: zone.blocks.map((block) => {
+                if (block.id !== blockId) return block
+                return {
+                  ...block,
+                  available: Math.max(0, block.available - 1),
+                }
+              }),
+            }
+          }),
+        }
+      })
+    )
+  }
+
+  const handleCheckoutAndRelease = async (ticketId: string, method: 'QR' | 'POS') => {
+    const ticket = tickets.find((t) => t.id === ticketId)
+    if (!ticket) return
+
+    try {
+      await parkingAPI.processPayment(ticketId, ticket.fee, method)
+    } catch {
+      // Fallback
+    }
+
+    if (ticket.floorId && ticket.zoneId && ticket.blockId) {
+      setFloors((prevFloors) =>
+        prevFloors.map((floor) => {
+          if (floor.id !== ticket.floorId) return floor
+          return {
+            ...floor,
+            zones: floor.zones.map((zone) => {
+              if (zone.id !== ticket.zoneId) return zone
+              return {
+                ...zone,
+                blocks: zone.blocks.map((block) => {
+                  if (block.id !== ticket.blockId) return block
+                  return {
+                    ...block,
+                    available: Math.min(block.capacity, block.available + 1),
+                  }
+                }),
+              }
+            }),
+          }
+        })
+      )
+    }
+
+    setTickets((prev) => prev.filter((t) => t.id !== ticketId))
+    if (activeTicket?.id === ticketId) {
+      setActiveTicket(null)
+    }
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_10%_10%,#ecfdf5_0%,#f0fdf4_36%,#f8fafc_70%)] text-slate-900 font-sans">
-      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/80 backdrop-blur-md">
+    <div
+      className="min-h-screen bg-slate-100 text-slate-900"
+      style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+    >
+      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white shadow-xs">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 sm:px-6">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-widest text-emerald-700">Parking Kiosk HCI System</p>
-            <h1 className="text-sm font-bold text-slate-900 sm:text-base font-grotesk">
-              Hệ thống Gửi xe Thông minh - Prototype v1.0
+            <p className="text-[11px] font-bold uppercase tracking-widest text-emerald-700">Parking Management System</p>
+            <h1 className="text-sm font-bold text-slate-900 sm:text-base">
+              Hệ thống Quản lý & Kiosk Gửi xe Thông minh
             </h1>
           </div>
-          <span className="rounded-full border border-emerald-300 bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">
-            🚀 Live
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Hệ thống đang hoạt động
+            </span>
+          </div>
         </div>
       </header>
 
-      <nav className="border-b border-slate-200/80 bg-white/60 backdrop-blur-sm overflow-x-auto">
-        <div className="mx-auto flex w-full max-w-6xl gap-2 px-4 py-3 sm:px-6">
+      <nav className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex w-full max-w-6xl gap-2 overflow-x-auto px-4 py-3 sm:px-6">
           {SCREENS.map((s) => {
             const active = s.id === activeScreen
             return (
@@ -1163,7 +1656,7 @@ export default function App() {
                 className={`min-w-fit rounded-xl px-3.5 py-2.5 text-left transition ${
                   active
                     ? 'bg-emerald-600 text-white shadow-md'
-                    : 'bg-white text-slate-700 hover:bg-emerald-50 border border-slate-200'
+                    : 'bg-slate-50 text-slate-700 hover:bg-emerald-50 hover:text-emerald-900 border border-slate-200'
                 }`}
               >
                 <p className="text-xs font-bold">{s.label}</p>
@@ -1175,17 +1668,72 @@ export default function App() {
       </nav>
 
       <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
-        {loading ? (
-          <div className="text-center py-12">
-            <div className="inline-block text-4xl">⏳ Đang tải...</div>
-          </div>
-        ) : (
-          screenMap[activeScreen]
+        {activeScreen === 'overview' && (
+          <OverviewScreen
+            floors={floors}
+            onSelectFloor={setCurrentFloorId}
+            onNavigate={setActiveScreen}
+          />
+        )}
+
+        {activeScreen === 'ticket' && (
+          <TicketScreen
+            floors={floors}
+            onIssueTicket={handleIssueTicket}
+            onNavigateToFloorMap={(fId, ticket) => {
+              setCurrentFloorId(fId)
+              setActiveTicket(ticket)
+              setActiveScreen('floormap')
+            }}
+            onNavigateToSavePosition={(fId, ticket) => {
+              setCurrentFloorId(fId)
+              setActiveTicket(ticket)
+              setActiveScreen('saveposition')
+            }}
+          />
+        )}
+
+        {activeScreen === 'floormap' && (
+          <FloorMapScreen
+            floors={floors}
+            currentFloorId={currentFloorId}
+            onNavigateToOverview={() => setActiveScreen('overview')}
+            onNavigateToSavePosition={() => setActiveScreen('saveposition')}
+            onNavigateToCheckPosition={() => setActiveScreen('checkposition')}
+          />
+        )}
+
+        {activeScreen === 'saveposition' && (
+          <SavePositionScreen
+            floors={floors}
+            currentFloorId={currentFloorId}
+            activeTicket={activeTicket}
+            onSaveBlock={handleSaveBlock}
+            onNavigateToCheckPosition={() => setActiveScreen('checkposition')}
+          />
+        )}
+
+        {activeScreen === 'checkposition' && (
+          <CheckPositionScreen
+            tickets={tickets}
+            onNavigateToPayment={(ticket) => {
+              setActiveTicket(ticket)
+              setActiveScreen('payment')
+            }}
+          />
+        )}
+
+        {activeScreen === 'payment' && (
+          <PaymentScreen
+            tickets={tickets}
+            onCheckoutAndRelease={handleCheckoutAndRelease}
+            onNavigateToOverview={() => setActiveScreen('overview')}
+          />
         )}
       </main>
 
-      <footer className="border-t border-slate-200 bg-white/60 py-4 text-center text-xs font-medium text-slate-500">
-        Bản Prototype HCI Chuẩn hóa • Nhấn các Tab menu để tương tác các màn hình
+      <footer className="border-t border-slate-200 bg-white py-4 text-center text-xs font-medium text-slate-500">
+        Hệ thống Quản lý Bãi xe Thông minh • Giao diện Kiosk Tương tác Trực quan.
       </footer>
     </div>
   )
