@@ -4,8 +4,8 @@ const mockData = {
     {
       id: 'B1',
       name: 'Tầng B1',
-      capacity: 100,
-      occupied: 45,
+      capacity: 480,
+      occupied: 180,
       sections: [
         {
           id: 'A',
@@ -60,8 +60,8 @@ const mockData = {
     {
       id: 'B2',
       name: 'Tầng B2',
-      capacity: 100,
-      occupied: 32,
+      capacity: 480,
+      occupied: 180,
       sections: [
         {
           id: 'A',
@@ -104,8 +104,8 @@ const mockData = {
     {
       id: 'B3',
       name: 'Tầng B3',
-      capacity: 100,
-      occupied: 60,
+      capacity: 480,
+      occupied: 360,
       sections: [
         { id: 'A', name: 'Khu A', slots: Array.from({ length: 6 }, (_, i) => ({ id: `A${i + 1}`, status: 'OCCUPIED', carId: `CAR-${i}` })) },
         { id: 'B', name: 'Khu B', slots: Array.from({ length: 6 }, (_, i) => ({ id: `B${i + 1}`, status: 'OCCUPIED', carId: `CAR-${i + 10}` })) },
@@ -116,8 +116,8 @@ const mockData = {
     {
       id: 'B4',
       name: 'Tầng B4',
-      capacity: 100,
-      occupied: 25,
+      capacity: 480,
+      occupied: 120,
       sections: [
         { id: 'A', name: 'Khu A', slots: Array.from({ length: 6 }, (_, i) => ({ id: `A${i + 1}`, status: 'EMPTY', carId: null })) },
         { id: 'B', name: 'Khu B', slots: Array.from({ length: 6 }, (_, i) => ({ id: `B${i + 1}`, status: i < 3 ? 'OCCUPIED' : 'EMPTY', carId: i < 3 ? `CAR-${i}` : null })) },
@@ -128,8 +128,8 @@ const mockData = {
     {
       id: 'B5',
       name: 'Tầng B5',
-      capacity: 100,
-      occupied: 80,
+      capacity: 480,
+      occupied: 384,
       sections: [
         { id: 'A', name: 'Khu A', slots: Array.from({ length: 6 }, (_, i) => ({ id: `A${i + 1}`, status: 'OCCUPIED', carId: `CAR-${i}` })) },
         { id: 'B', name: 'Khu B', slots: Array.from({ length: 6 }, (_, i) => ({ id: `B${i + 1}`, status: 'OCCUPIED', carId: `CAR-${i + 10}` })) },
@@ -140,8 +140,8 @@ const mockData = {
     {
       id: 'B6',
       name: 'Tầng B6',
-      capacity: 100,
-      occupied: 95,
+      capacity: 480,
+      occupied: 456,
       sections: [
         { id: 'A', name: 'Khu A', slots: Array.from({ length: 6 }, (_, i) => ({ id: `A${i + 1}`, status: 'OCCUPIED', carId: `CAR-${i}` })) },
         { id: 'B', name: 'Khu B', slots: Array.from({ length: 6 }, (_, i) => ({ id: `B${i + 1}`, status: 'OCCUPIED', carId: `CAR-${i + 10}` })) },
@@ -156,6 +156,17 @@ const mockData = {
     { id: 'CAR-003', licensePlate: '52-F1 666.66', entryTime: new Date(Date.now() - 5400000), exitTime: null },
   ],
   tickets: [
+    {
+      id: 'P-0502',
+      carId: 'CAR-001',
+      entryTime: new Date(Date.now() - 3600000),
+      exitTime: null,
+      floor: 'B2',
+      slot: 'A6.20',
+      fee: 5000,
+      paymentStatus: 'UNPAID',
+      paymentMethod: null
+    },
     { 
       id: '#P-8821', 
       carId: 'CAR-001', 

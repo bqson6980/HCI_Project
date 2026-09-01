@@ -23,13 +23,6 @@ interface FloorDisplay {
   status: FloorStatus
 }
 
-const ZONES_DATA = [
-  { id: 'A', name: 'A' },
-  { id: 'B', name: 'B' },
-  { id: 'C', name: 'C' },
-  { id: 'D', name: 'D' },
-]
-
 function statusBadge(status: FloorStatus) {
   if (status === 'full') return { label: 'ĐẦY', bg: 'bg-rose-500 text-white border-rose-600' }
   if (status === 'warn') return { label: 'GẦN ĐẦY', bg: 'bg-amber-400 text-amber-950 border-amber-500' }
@@ -317,31 +310,75 @@ function TicketScreen() {
 /* =========================================================================
    3. SƠ ĐỒ CHỖ TRỐNG TẦNG B2 (FLOOR MAP SCREEN)
    ========================================================================= */
-function ZoneCard({ name }: { name: string }) {
+type ParkingCluster = {
+  id: string
+  occupiedSlots: number[]
+  disabled?: boolean
+}
+
+type ParkingZone = {
+  id: string
+  clusters: ParkingCluster[]
+}
+
+const createParkingZones = (): ParkingZone[] =>
+  ['A', 'B', 'C', 'D'].map((zoneId) => ({
+    id: zoneId,
+    clusters: Array.from({ length: 6 }, (_, index) => {
+      const id = `${zoneId}${index + 1}`
+      // Trạng thái mẫu cho prototype: các cụm đầy hiển thị đỏ và không thể chọn.
+      const isFull = ['A2', 'B5', 'C3', 'D6'].includes(id)
+      return {
+        id,
+        occupiedSlots: isFull ? Array.from({ length: 20 }, (_, slot) => slot + 1) : [1, 3, 6, 9, 12],
+        disabled: isFull,
+      }
+    }),
+  }))
+
+function ZoneCard({
+  zone,
+}: {
+  zone: ParkingZone
+}) {
+  const occupied = zone.clusters.reduce((total, cluster) => total + cluster.occupiedSlots.length, 0)
+
   return (
     <div className="rounded-3xl border-2 border-slate-300 bg-white p-5 shadow-sm">
-      <h3 className="mb-4 text-center text-3xl font-black text-slate-900">{name}</h3>
-      <div className="grid gap-3">
-        {Array.from({ length: 2 }).map((_, rIdx) => (
-          <div key={rIdx} className="grid grid-cols-3 gap-3">
-            {Array.from({ length: 3 }).map((_, cIdx) => (
-              <div
-                key={cIdx}
-                className={`flex h-16 sm:h-20 items-center justify-center rounded-2xl font-extrabold text-lg sm:text-xl shadow-xs transition ${
-                  (rIdx + cIdx) % 2 === 0 ? 'bg-emerald-500 text-white font-mono' : 'bg-rose-500'
-                }`}
-              >
-                {(rIdx + cIdx) % 2 === 0 && '5/20'}
-              </div>
-            ))}
-          </div>
-        ))}
+      <div className="mb-4 flex items-center justify-between">
+        <h3 className="text-3xl font-black text-slate-900">{zone.id}</h3>
+        <span className="font-mono text-sm font-extrabold text-slate-600">{occupied}/120</span>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        {zone.clusters.map((cluster) => {
+          const isFull = cluster.disabled || cluster.occupiedSlots.length >= 20
+          return (
+            <div
+              key={cluster.id}
+              title={`Cụm ${cluster.id}: ${cluster.occupiedSlots.length}/20 chỗ đã đỗ`}
+              className={`flex h-16 flex-col items-center justify-center rounded-2xl font-extrabold shadow-xs sm:h-20 ${
+                isFull ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white'
+              }`}
+            >
+              <span className="text-xs">{cluster.id}</span>
+              <span className="font-mono text-lg">{isFull ? 'ĐẦY' : `${cluster.occupiedSlots.length}/20`}</span>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
 }
 
 function FloorMapScreen() {
+  const [parkingZones, setParkingZones] = useState<ParkingZone[]>(createParkingZones)
+
+  useEffect(() => {
+    parkingAPI.getParkingLayout()
+      .then((layout) => setParkingZones(layout as ParkingZone[]))
+      .catch(() => setParkingZones(createParkingZones()))
+  }, [])
+
   return (
     <ScreenFrame title="Sơ đồ chi tiết tầng B2">
       <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-md">
@@ -353,8 +390,8 @@ function FloorMapScreen() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-2 max-w-4xl mx-auto">
-          {ZONES_DATA.map((z) => (
-            <ZoneCard key={z.id} name={z.name} />
+          {parkingZones.map((zone) => (
+            <ZoneCard key={zone.id} zone={zone} />
           ))}
         </div>
 
@@ -388,104 +425,197 @@ function FloorMapScreen() {
    ========================================================================= */
 function SavePositionScreen() {
   const [ticketId, setTicketId] = useState('')
+  const [parkingZones, setParkingZones] = useState<ParkingZone[]>(createParkingZones)
   const [selectedZone, setSelectedZone] = useState<string | null>(null)
-  const [selectedSlot, setSelectedSlot] = useState<string | null>(null)
+  const [selectedCluster, setSelectedCluster] = useState<string | null>(null)
+  const [selectedSlot, setSelectedSlot] = useState<number | null>(null)
   const [confirmed, setConfirmed] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
-  // 6 cụm cho mỗi khu: A1-A6, B1-B6, C1-C6, D1-D6
-  const zones = ['A', 'B', 'C', 'D']
-  const slotsPerZone = 6
+  const currentZone = parkingZones.find((zone) => zone.id === selectedZone)
+  const currentCluster = currentZone?.clusters.find((cluster) => cluster.id === selectedCluster)
+  const occupiedSlots = currentCluster?.occupiedSlots ?? []
+  const hasTicketId = ticketId.trim().length > 0
 
-  const handleConfirm = () => {
-    if (selectedZone && selectedSlot) {
-      setConfirmed(true)
+  useEffect(() => {
+    parkingAPI.getParkingLayout()
+      .then((layout) => setParkingZones(layout as ParkingZone[]))
+      .catch(() => setParkingZones(createParkingZones()))
+  }, [])
+
+  const handleConfirm = async () => {
+    if (!hasTicketId || !currentZone || !currentCluster || selectedSlot === null || occupiedSlots.includes(selectedSlot)) return
+
+    setSaveError('')
+
+    try {
+      const result = await parkingAPI.reserveParkingSlot({
+        zoneId: currentZone.id,
+        clusterId: currentCluster.id,
+        slotNumber: selectedSlot,
+        ticketId: ticketId.trim() || undefined,
+      })
+      setParkingZones(result.layout as ParkingZone[])
+    } catch (error: any) {
+      console.error('Unable to save parking slot to server:', error)
+      if (error?.response) {
+        setSaveError(error.response.data?.error || 'Không thể lưu vị trí đỗ xe.')
+        return
+      }
+      // Prototype remains usable when the local backend has not been started.
+      setParkingZones((zones) => zones.map((zone) => (
+        zone.id === currentZone.id
+          ? {
+              ...zone,
+              clusters: zone.clusters.map((cluster) => (
+                cluster.id === currentCluster.id
+                  ? { ...cluster, occupiedSlots: [...cluster.occupiedSlots, selectedSlot] }
+                  : cluster
+              )),
+            }
+          : zone
+      )))
     }
+    setConfirmed(true)
   }
 
   const handleReset = () => {
     setTicketId('')
+    setParkingZones(createParkingZones())
     setSelectedZone(null)
+    setSelectedCluster(null)
     setSelectedSlot(null)
     setConfirmed(false)
+    setSaveError('')
   }
 
   return (
     <ScreenFrame title="Lưu vị trí xe - Chọn ô đỗ xe" subtitle="Khách hàng chọn vị trí đỗ xe của mình">
-      {!confirmed ? (
-        <div className="space-y-6">
+      <div className="space-y-6">
+          {confirmed && currentCluster && selectedSlot !== null && (
+            <div className="rounded-2xl border-2 border-emerald-400 bg-emerald-50 p-4 text-center text-sm font-bold text-emerald-900">
+              Đã xác nhận ô {currentCluster.id}.{selectedSlot}. Ô này đã chuyển sang trạng thái đã đỗ.
+            </div>
+          )}
           {/* Nhập mã thẻ xe */}
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Nhập mã thẻ xe</label>
             <input
               type="text"
               value={ticketId}
-              onChange={(e) => setTicketId(e.target.value.toUpperCase())}
+              onChange={(e) => {
+                setTicketId(e.target.value.toUpperCase())
+                setSelectedZone(null)
+                setSelectedCluster(null)
+                setSelectedSlot(null)
+                setConfirmed(false)
+                setSaveError('')
+              }}
               placeholder="P-1234"
               className="w-full px-4 py-3 border border-slate-300 rounded-lg text-center text-lg font-mono font-bold text-slate-900"
             />
+            {!hasTicketId && <p className="mt-2 text-xs font-semibold text-amber-700">Nhập mã thẻ xe để mở chức năng chọn khu, cụm và ô đỗ.</p>}
           </div>
 
-          {/* Chọn cụm hoặc chi tiết ô */}
-          {!selectedZone ? (
-            <>
-              <div>
-                <h3 className="text-lg font-bold text-slate-900 mb-4">Chọn khu vực:</h3>
-                <div className="grid gap-4 md:grid-cols-2">
-                  {zones.map((zone) => (
+          {saveError && <p role="alert" className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-800">{saveError}</p>}
+
+          <section>
+            <h3 className="mb-4 text-lg font-bold text-slate-900">Bước 1 — Chọn khu vực:</h3>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {parkingZones.map((zone) => {
+                const availableClusters = zone.clusters.filter((cluster) => !cluster.disabled && cluster.occupiedSlots.length < 20).length
+                return (
+                  <button
+                    key={zone.id}
+                    type="button"
+                    disabled={!hasTicketId}
+                    onClick={() => { setSelectedZone(zone.id); setSelectedCluster(null); setSelectedSlot(null); setConfirmed(false) }}
+                    className={`rounded-2xl border-2 bg-white p-5 text-center shadow-sm transition ${
+                      !hasTicketId
+                        ? 'cursor-not-allowed border-slate-200 opacity-50'
+                        : selectedZone === zone.id
+                        ? 'border-emerald-700 bg-emerald-50 ring-4 ring-emerald-100'
+                        : 'border-slate-300 hover:border-emerald-500 hover:bg-emerald-50'
+                    }`}
+                  >
+                    <p className="text-3xl font-black text-slate-900">KHU {zone.id}</p>
+                    <p className="mt-2 text-xs font-bold text-emerald-700">{availableClusters}/6 cụm còn chỗ</p>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+
+          {currentZone && (
+            <section>
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <h3 className="text-lg font-bold text-slate-900">Bước 2 — Chọn cụm trong khu {currentZone.id}:</h3>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">Mỗi cụm có 20 ô đỗ</span>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {currentZone.clusters.map((cluster) => {
+                  const isAvailable = !cluster.disabled && cluster.occupiedSlots.length < 20
+                  return (
                     <button
-                      key={zone}
+                      key={cluster.id}
                       type="button"
-                      onClick={() => setSelectedZone(zone)}
-                      className="rounded-2xl border-2 border-slate-300 bg-white p-6 text-center hover:border-emerald-500 hover:bg-emerald-50 transition shadow-sm"
+                      disabled={!hasTicketId || !isAvailable}
+                      onClick={() => { setSelectedCluster(cluster.id); setSelectedSlot(null); setConfirmed(false) }}
+                      className={`rounded-2xl border-2 p-4 text-left transition ${
+                        isAvailable
+                          ? selectedCluster === cluster.id
+                            ? 'border-emerald-700 bg-emerald-600 text-white ring-4 ring-emerald-100'
+                            : 'border-emerald-300 bg-white text-slate-900 hover:border-emerald-600 hover:bg-emerald-50'
+                          : 'cursor-not-allowed border-rose-600 bg-rose-500 text-white opacity-80'
+                      }`}
                     >
-                      <p className="text-3xl font-extrabold text-slate-900 font-grotesk">KHU {zone}</p>
-                      <p className="mt-2 text-xs text-slate-600">Chọn để xem chi tiết cụm</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              <div>
-                <h3 className="text-lg font-bold text-slate-900 mb-4">Chọn cụm trong khu {selectedZone} (mỗi cụm 20 chỗ):</h3>
-                <div className="grid gap-3 md:grid-cols-6">
-                  {Array.from({ length: slotsPerZone }).map((_, i) => {
-                    const cluster = `${selectedZone}${i + 1}`
-                    return (
-                      <button
-                        key={cluster}
-                        type="button"
-                        onClick={() => setSelectedSlot(cluster)}
-                        className={`rounded-xl py-3 px-3 font-bold text-center transition ${
-                          selectedSlot === cluster
-                            ? 'bg-emerald-600 text-white border-2 border-emerald-700 shadow-lg'
-                            : 'bg-white border-2 border-slate-300 text-slate-900 hover:border-emerald-400'
-                        }`}
-                      >
-                        {cluster}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {selectedSlot && (
-                <div className="rounded-2xl border-2 border-emerald-400 bg-emerald-50 p-5">
-                  <p className="text-sm font-bold text-emerald-800">📍 Bạn đã chọn cụm <strong>{selectedSlot}</strong></p>
-                  <p className="text-xs text-emerald-700 mt-2">Cụm này có 20 chỗ đỗ (sắp xếp 4 hàng × 5 ô)</p>
-
-                  {/* Hiển thị chi tiết 20 ô trong cụm */}
-                  <div className="mt-4 grid gap-2" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
-                    {Array.from({ length: 20 }).map((_, i) => (
-                      <div key={i} className="flex items-center justify-center rounded-lg bg-white border-2 border-emerald-400 py-2 text-xs font-bold text-emerald-800">
-                        {selectedSlot}.{i + 1}
+                      <div className="flex items-center justify-between">
+                        <span className="text-xl font-black">{cluster.id}</span>
+                        <span className="font-mono text-sm font-extrabold">{cluster.occupiedSlots.length}/20</span>
                       </div>
-                    ))}
-                  </div>
+                      <p className={`mt-1 text-xs font-semibold ${isAvailable && selectedCluster !== cluster.id ? 'text-emerald-700' : 'text-current'}`}>
+                        {isAvailable ? 'Nhấp để chọn cụm' : 'Cụm đã đầy'}
+                      </p>
+                    </button>
+                  )
+                })}
+              </div>
+            </section>
+          )}
+
+          {currentCluster && (
+            <section className="rounded-3xl border-2 border-emerald-300 bg-emerald-50/60 p-5 sm:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">Bước 3 — Chọn ô đỗ trong cụm</p>
+                  <h3 className="text-2xl font-black text-slate-900">Cụm {currentCluster.id} · {currentCluster.occupiedSlots.length}/20 chỗ đã đỗ</h3>
                 </div>
-              )}
-            </>
+                <button type="button" onClick={() => { setSelectedCluster(null); setSelectedSlot(null) }} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                  Chọn cụm khác
+                </button>
+              </div>
+              <p className="mt-4 text-sm text-slate-600">Chọn chính xác một ô trống để đỗ xe. Các ô đỏ đã có xe và không thể chọn.</p>
+              <div className="mt-4 grid grid-cols-4 gap-2 sm:grid-cols-5">
+                {Array.from({ length: 20 }, (_, index) => index + 1).map((slotNumber) => {
+                  const isOccupied = occupiedSlots.includes(slotNumber)
+                  const isSelected = selectedSlot === slotNumber
+                  return (
+                    <button
+                      key={slotNumber}
+                      type="button"
+                      disabled={!hasTicketId || isOccupied}
+                      onClick={() => { setSelectedSlot(slotNumber); setConfirmed(false) }}
+                      className={`flex min-h-14 flex-col items-center justify-center rounded-xl border-2 text-xs font-extrabold transition ${
+                        isOccupied ? 'cursor-not-allowed border-rose-600 bg-rose-500 text-white' : isSelected ? 'border-emerald-700 bg-emerald-600 text-white ring-4 ring-emerald-200' : 'border-emerald-300 bg-white text-emerald-800 hover:border-emerald-600 hover:bg-emerald-100'
+                      }`}
+                    >
+                      <span>{isOccupied ? 'ĐÃ ĐỖ' : 'Ô TRỐNG'}</span>
+                      <span className="mt-0.5 font-mono">{currentCluster.id}.{slotNumber}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </section>
           )}
 
           {/* Buttons */}
@@ -493,8 +623,10 @@ function SavePositionScreen() {
             <button
               type="button"
               onClick={() => {
-                if (selectedSlot) {
+                if (selectedSlot !== null) {
                   setSelectedSlot(null)
+                } else if (selectedCluster) {
+                  setSelectedCluster(null)
                 } else if (selectedZone) {
                   setSelectedZone(null)
                 } else {
@@ -505,33 +637,18 @@ function SavePositionScreen() {
             >
               ← Quay lại
             </button>
-            {selectedSlot && (
+            {selectedSlot !== null && currentCluster && (
               <button
                 type="button"
                 onClick={handleConfirm}
-                className="flex-1 rounded-2xl bg-emerald-600 px-4 py-3.5 text-sm font-bold text-white hover:bg-emerald-700 active:scale-95"
+                disabled={!hasTicketId || confirmed}
+                className="flex-1 rounded-2xl bg-emerald-600 px-4 py-3.5 text-sm font-bold text-white hover:bg-emerald-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                ✔ Xác nhận chọn {selectedSlot}
+                ✔ Xác nhận ô {currentCluster.id}.{selectedSlot}
               </button>
             )}
           </div>
         </div>
-      ) : (
-        <div className="rounded-2xl border-2 border-emerald-400 bg-emerald-50 p-6 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-600 text-2xl text-white shadow-lg mx-auto">
-            ✓
-          </div>
-          <h3 className="mt-4 text-xl font-extrabold text-emerald-950">XÁC NHẬN VỊ TRÍ THÀNH CÔNG!</h3>
-          <p className="mt-2 text-sm text-emerald-800">Thẻ: <strong>{ticketId}</strong> | Vị trí: <strong>{selectedSlot}</strong></p>
-          <button
-            type="button"
-            onClick={handleReset}
-            className="mt-4 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700"
-          >
-            Tiếp tục
-          </button>
-        </div>
-      )}
     </ScreenFrame>
   )
 }
@@ -539,17 +656,47 @@ function SavePositionScreen() {
 /* =========================================================================
    5. TRA CỨU VỊ TRÍ XE (CHECK-POSITION SCREEN)
    ========================================================================= */
+function getRoutePoints(clusterId?: string) {
+  const zone = clusterId?.charAt(0) || 'A'
+  const clusterNumber = Math.min(6, Math.max(1, Number.parseInt(clusterId?.slice(1) || '1', 10)))
+  const column = (clusterNumber - 1) % 3
+  const secondRow = clusterNumber > 3
+  const isRightSide = zone === 'B' || zone === 'D'
+  const isBottomZone = zone === 'C' || zone === 'D'
+  const targetX = (isRightSide ? 60 : 10) + column * 15
+  const targetY = (isBottomZone ? 64 : 17) + (secondRow ? 19 : 0)
+
+  // Route starts at the exit on the right, follows the aisle, then enters the selected cluster.
+  return `100,50 96,50 96,${targetY} ${targetX},${targetY}`
+}
+
 function CheckPositionScreen() {
   const [cardScanned, setCardScanned] = useState(false)
-  const [ticketId, setTicketId] = useState('#P-8821')
+  const [ticketId, setTicketId] = useState('P-0502')
   const [carPosition, setCarPosition] = useState<any>(null)
   const [loading, setLoading] = useState(false)
+  const [defaultEntryTime] = useState(() => new Date(Date.now() - 60 * 60 * 1000).toLocaleTimeString('vi-VN'))
 
   const handleScanCard = async () => {
     setLoading(true)
     try {
       const response = await parkingAPI.getPositionByTicket(ticketId)
-      setCarPosition(response)
+      const isDefaultTicket = ticketId.trim().toUpperCase() === 'P-0502'
+      const hasMissingTicketDetails = !response?.licensePlate || response.licensePlate === 'N/A' || !response?.entryTime || response.entryTime === 'N/A'
+
+      setCarPosition(
+        isDefaultTicket && hasMissingTicketDetails
+          ? {
+              ...response,
+              floor: 'B2',
+              zone: 'A',
+              cluster: 'A6',
+              slot: 'A6.20',
+              licensePlate: '52-F1 888.88',
+              entryTime: defaultEntryTime,
+            }
+          : response
+      )
       setCardScanned(true)
     } catch (error) {
       console.error('Error fetching position:', error)
@@ -589,7 +736,7 @@ function CheckPositionScreen() {
             type="text"
             value={ticketId}
             onChange={(e) => setTicketId(e.target.value.toUpperCase())}
-            placeholder="#P-8821"
+            placeholder="P-0502"
             className="mt-4 px-4 py-2 border border-slate-300 rounded-lg text-center font-mono text-sm w-32"
           />
           <button
@@ -620,35 +767,87 @@ function CheckPositionScreen() {
             </div>
           </div>
 
-          <div className="mb-6">
-            <h3 className="text-lg font-bold text-slate-900 mb-4">Sơ đồ các khu vực (6 cụm/khu):</h3>
-            <div className="grid gap-4 md:grid-cols-4">
-              {['A', 'B', 'C', 'D'].map((zone) => (
-                <div key={zone}>
-                  <p className="text-sm font-bold text-slate-700 mb-2">Khu {zone}</p>
-                  <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
-                    {Array.from({ length: 6 }).map((_, i) => {
-                      const cluster = `${zone}${i + 1}`
-                      const hasCarCluster = cluster === carPosition?.cluster
-                      return (
-                        <div
-                          key={cluster}
-                          className={`flex items-center justify-center rounded-lg py-3 px-2 text-xs font-bold transition ${
-                            hasCarCluster
-                              ? 'bg-emerald-600 text-white border-2 border-emerald-700 ring-2 ring-emerald-300'
-                              : 'bg-slate-100 text-slate-600 border border-slate-200'
-                          }`}
-                        >
-                          {hasCarCluster && <span className="mr-1">🚗</span>}
-                          {cluster}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
+          <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <div className="mb-5 text-center">
+              <h3 className="text-3xl font-black tracking-tight text-slate-900">TẦNG B2</h3>
+              <p className="mt-1 text-xs font-medium text-slate-500">Sơ đồ tổng quan phân khu A - B - C - D</p>
             </div>
-          </div>
+
+            <div className="relative mx-auto max-w-4xl">
+              <div className="grid gap-4 md:grid-cols-2">
+              {['A', 'B', 'C', 'D'].map((zone) => {
+                const isAvailableZone = zone === 'A' || zone === 'C'
+                return (
+                  <div key={zone} className={`relative rounded-3xl border p-4 ${isAvailableZone ? 'border-slate-300' : 'border-rose-200'}`}>
+                    <h4 className="mb-3 text-center text-2xl font-black text-slate-900">{zone}</h4>
+                    <div className="grid grid-cols-3 gap-2.5">
+                      {Array.from({ length: 6 }).map((_, index) => {
+                        const cluster = `${zone}${index + 1}`
+                        const hasCarCluster = cluster === carPosition?.cluster
+                        return (
+                          <div
+                            key={cluster}
+                            title={`Cụm ${cluster}${hasCarCluster ? ' — xe của bạn' : ''}`}
+                            className={`flex h-14 items-center justify-center rounded-xl text-sm font-extrabold shadow-sm sm:h-16 ${
+                              hasCarCluster
+                                ? 'border-2 border-amber-300 bg-slate-900 text-white ring-4 ring-amber-200'
+                                : isAvailableZone
+                                ? 'bg-emerald-500 font-mono text-white'
+                                : 'bg-rose-500 text-white'
+                            }`}
+                          >
+                            {hasCarCluster ? <span>🚗 {cluster}</span> : isAvailableZone ? '5/20' : ''}
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                  </div>
+                )
+              })}
+              </div>
+              <svg
+                aria-label={`Đường đi tới cụm ${carPosition?.cluster || 'A1'}`}
+                className="pointer-events-none absolute inset-0 z-20 hidden h-full w-full lg:block"
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+              >
+                <defs>
+                  <marker id="route-arrow" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto">
+                    <path d="M 0 0 L 5 2.5 L 0 5 z" fill="#ef4444" />
+                  </marker>
+                </defs>
+                <polyline
+                  points={getRoutePoints(carPosition?.cluster)}
+                  fill="none"
+                  stroke="white"
+                  strokeWidth="2.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <polyline
+                  points={getRoutePoints(carPosition?.cluster)}
+                  fill="none"
+                  stroke="#ef4444"
+                  strokeWidth="1.25"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeDasharray="3 1.5"
+                  markerEnd="url(#route-arrow)"
+                />
+              </svg>
+              <div className="mt-4 flex flex-col items-center lg:absolute lg:-right-28 lg:top-1/2 lg:mt-0 lg:-translate-y-1/2">
+                <span className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-white bg-slate-900 text-xl text-white shadow-lg">🚶</span>
+                <span className="mt-1 rounded-full bg-slate-900 px-3 py-1.5 text-[10px] font-black text-white shadow">BẮT ĐẦU / LỐI RA</span>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-5 text-xs font-semibold text-slate-600">
+              <span className="flex items-center gap-2"><span className="h-3.5 w-3.5 rounded bg-emerald-500" /> Cụm còn chỗ</span>
+              <span className="flex items-center gap-2"><span className="h-3.5 w-3.5 rounded bg-rose-500" /> Cụm đã đầy</span>
+              <span className="flex items-center gap-2"><span className="h-3.5 w-3.5 rounded bg-slate-900" /> Vị trí xe</span>
+            </div>
+          </section>
 
           <div className="rounded-2xl border-2 border-emerald-500 bg-white p-5 shadow-lg">
             <div className="mb-4 flex items-center justify-between border-b border-emerald-100 pb-3">
@@ -692,9 +891,9 @@ function CheckPositionScreen() {
 
           <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
             <p className="text-xs font-bold uppercase tracking-wider text-slate-500">📍 VỊ TRÍ HIỆN TẠI</p>
-            <p className="text-base font-bold text-slate-900">Kiosk Tra cứu Lối vào Tầng {carPosition?.floor || 'B2'} (Kiosk #01)</p>
+            <p className="text-base font-bold text-slate-900">Điểm bắt đầu / lối ra tầng {carPosition?.floor || 'B2'} — giữa khu B và khu D</p>
             <p className="mt-1 text-xs text-slate-600">
-              <strong>Hướng dẫn:</strong> Từ Kiosk đi thẳng 15m → Rẽ phải vào Khu {carPosition?.zone || 'A'} → Ô đỗ {carPosition?.slot || 'A1.1'} bên tay trái (~25m).
+              <strong>Hướng dẫn:</strong> Bắt đầu từ ký hiệu 🚶 giữa khu B và D → đi tới khu {carPosition?.zone || 'A'} → cụm {carPosition?.cluster || 'A1'} → ô {carPosition?.slot || 'A1.1'}.
             </p>
           </div>
         </div>
@@ -711,6 +910,7 @@ type CheckoutStep = 'tap_card' | 'pay' | 'success'
 function PaymentScreen() {
   const [step, setStep] = useState<CheckoutStep>('tap_card')
   const [method, setMethod] = useState<'qr' | 'card'>('qr')
+  const [ticketId, setTicketId] = useState('P-0502')
 
   return (
     <ScreenFrame title="Luồng Thanh toán & Rời bãi xe" subtitle="Kiosk Cổng ra / Tương tác trả thẻ -> Thanh toán -> Barie mở">
@@ -750,12 +950,23 @@ function PaymentScreen() {
           <p className="mt-1 max-w-md text-sm text-slate-600">
             Quẹt hoặc thả thẻ gửi xe vào khe nhận thẻ để xem thông tin và thanh toán ngay.
           </p>
+          <label className="mt-5 w-full max-w-xs text-left text-xs font-bold uppercase tracking-wider text-slate-500">
+            Mã thẻ gửi xe
+            <input
+              type="text"
+              value={ticketId}
+              onChange={(event) => setTicketId(event.target.value.toUpperCase())}
+              placeholder="P-0502"
+              className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-center font-mono text-base font-extrabold text-slate-900 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+            />
+          </label>
           <button
             type="button"
             onClick={() => setStep('pay')}
-            className="mt-6 rounded-2xl bg-emerald-600 px-7 py-4 text-base font-extrabold text-white shadow-lg transition hover:bg-emerald-700 active:scale-95"
+            disabled={!ticketId.trim()}
+            className="mt-6 rounded-2xl bg-emerald-600 px-7 py-4 text-base font-extrabold text-white shadow-lg transition hover:bg-emerald-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            QUẸT THẺ (#P-8821) →
+            QUẸT THẺ ({ticketId || 'P-0502'}) →
           </button>
         </div>
       )}
@@ -767,7 +978,7 @@ function PaymentScreen() {
               <div>
                 <h3 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-3">Thông tin phiếu gửi xe</h3>
                 <div className="mt-4 space-y-3 text-sm">
-                  <div className="flex justify-between"><span className="text-slate-500">Mã thẻ:</span><span className="font-mono font-bold text-slate-900">#P-8821</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Mã thẻ:</span><span className="font-mono font-bold text-slate-900">{ticketId}</span></div>
                   <div className="flex justify-between"><span className="text-slate-500">Biển số:</span><span className="font-mono font-bold text-emerald-700">52-F1 888.88</span></div>
                   <div className="flex justify-between"><span className="text-slate-500">Vị trí:</span><span className="font-semibold text-slate-800">Tầng B2 - Khu C (C4)</span></div>
                   <div className="flex justify-between"><span className="text-slate-500">Vào lúc:</span><span className="font-mono text-slate-700">16:20</span></div>
@@ -894,19 +1105,19 @@ export default function App() {
           name: f.name,
           type: 'Xe máy',
           used: f.occupied,
-          total: 120, // 120 chỗ/tầng (thay vì capacity từ backend)
-          status: getFloorStatus((f.occupied / 120) * 100),
+          total: f.capacity,
+          status: getFloorStatus((f.occupied / f.capacity) * 100),
         }))
         setFloors(displayFloors)
       } catch (error) {
         console.error('Error loading floors:', error)
         setFloors([
-          { id: 'B1', name: 'Tầng B1', type: 'Xe máy', used: 45, total: 120, status: 'ok' },
-          { id: 'B2', name: 'Tầng B2', type: 'Xe máy', used: 32, total: 120, status: 'ok' },
-          { id: 'B3', name: 'Tầng B3', type: 'Xe máy', used: 100, total: 120, status: 'warn' },
-          { id: 'B4', name: 'Tầng B4', type: 'Xe máy', used: 25, total: 120, status: 'ok' },
-          { id: 'B5', name: 'Tầng B5', type: 'Xe máy', used: 95, total: 120, status: 'warn' },
-          { id: 'B6', name: 'Tầng B6', type: 'Xe máy', used: 110, total: 120, status: 'full' },
+          { id: 'B1', name: 'Tầng B1', type: 'Xe máy', used: 180, total: 480, status: 'ok' },
+          { id: 'B2', name: 'Tầng B2', type: 'Xe máy', used: 180, total: 480, status: 'ok' },
+          { id: 'B3', name: 'Tầng B3', type: 'Xe máy', used: 360, total: 480, status: 'warn' },
+          { id: 'B4', name: 'Tầng B4', type: 'Xe máy', used: 120, total: 480, status: 'ok' },
+          { id: 'B5', name: 'Tầng B5', type: 'Xe máy', used: 384, total: 480, status: 'warn' },
+          { id: 'B6', name: 'Tầng B6', type: 'Xe máy', used: 456, total: 480, status: 'full' },
         ])
       } finally {
         setLoading(false)

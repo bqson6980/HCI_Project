@@ -17,6 +17,29 @@ const parkingSystem = new Parking();
 // ============================================
 // FLOOR ROUTES
 // ============================================
+app.get('/api/parking-layout', (req, res) => {
+  try {
+    res.json({ success: true, data: parkingSystem.getParkingLayout() });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/parking-layout/reserve', (req, res) => {
+  try {
+    const { zoneId, clusterId, slotNumber, ticketId } = req.body;
+    const result = parkingSystem.reserveParkingSlot({
+      zoneId,
+      clusterId,
+      slotNumber: Number(slotNumber),
+      ticketId,
+    });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
 app.get('/api/floors', (req, res) => {
   try {
     const floors = parkingSystem.getFloorsInfo();
@@ -184,6 +207,8 @@ app.listen(PORT, () => {
   console.log(`📋 API Documentation:`);
   console.log(`   - GET  /api/health                 - Health check`);
   console.log(`   - GET  /api/floors                 - Get all floors info`);
+  console.log(`   - GET  /api/parking-layout         - Get B2 parking layout`);
+  console.log(`   - POST /api/parking-layout/reserve - Reserve a B2 parking slot`);
   console.log(`   - GET  /api/floors/:floorId/map    - Get floor detailed map`);
   console.log(`   - POST /api/cars/check-in          - Check in car`);
   console.log(`   - POST /api/tickets                - Generate parking ticket`);

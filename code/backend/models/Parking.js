@@ -8,6 +8,8 @@ class Parking {
     this.cars = new Map();
     this.tickets = new Map();
     this.payments = new Map();
+    this.parkingReservations = new Map();
+    this.parkingLayout = this.createParkingLayout();
 
     // Load mock data
     this.loadMockData();
@@ -28,6 +30,74 @@ class Parking {
     mockData.tickets.forEach(ticketData => {
       this.tickets.set(ticketData.id, { ...ticketData });
     });
+  }
+
+  /** Layout used by the B2 parking-position screen: 4 zones × 6 clusters × 20 slots. */
+  createParkingLayout() {
+    const fullClusters = new Set(['A2', 'B5', 'C3', 'D6']);
+    return ['A', 'B', 'C', 'D'].map(zoneId => ({
+      id: zoneId,
+      clusters: Array.from({ length: 6 }, (_, index) => {
+        const id = `${zoneId}${index + 1}`;
+        const occupiedSlots = fullClusters.has(id)
+          ? Array.from({ length: 20 }, (_, slot) => slot + 1)
+          : [1, 3, 6, 9, 12];
+        return { id, occupiedSlots, disabled: fullClusters.has(id) };
+      })
+    }));
+  }
+
+  getParkingLayout() {
+    return this.parkingLayout.map(zone => ({
+      ...zone,
+      clusters: zone.clusters.map(cluster => ({
+        ...cluster,
+        occupiedSlots: [...cluster.occupiedSlots]
+      }))
+    }));
+  }
+
+  reserveParkingSlot({ zoneId, clusterId, slotNumber, ticketId }) {
+    const normalizedTicketId = typeof ticketId === 'string' ? ticketId.trim().toUpperCase() : '';
+    if (!normalizedTicketId) {
+      throw new Error('Parking ticket ID is required');
+    }
+    if (this.parkingReservations.has(normalizedTicketId)) {
+      throw new Error('This parking ticket has already been assigned a parking slot');
+    }
+
+    const zone = this.parkingLayout.find(item => item.id === zoneId);
+    const cluster = zone?.clusters.find(item => item.id === clusterId);
+
+    if (!zone || !cluster || !Number.isInteger(slotNumber) || slotNumber < 1 || slotNumber > 20) {
+      throw new Error('Invalid parking zone, cluster, or slot');
+    }
+    if (cluster.disabled || cluster.occupiedSlots.length >= 20) {
+      throw new Error('Parking cluster is full');
+    }
+    if (cluster.occupiedSlots.includes(slotNumber)) {
+      throw new Error('Parking slot is already occupied');
+    }
+
+    cluster.occupiedSlots.push(slotNumber);
+    const parkingSlot = `${clusterId}.${slotNumber}`;
+    const floor = this.floors.get('B2');
+    if (floor && floor.occupied < floor.capacity) {
+      floor.occupied += 1;
+    }
+    this.parkingReservations.set(normalizedTicketId, parkingSlot);
+    const ticket = this.tickets.get(normalizedTicketId);
+    if (ticket) {
+      ticket.floor = 'B2';
+      ticket.slot = parkingSlot;
+      const car = this.cars.get(ticket.carId);
+      if (car) {
+        car.floor = 'B2';
+        car.slot = parkingSlot;
+      }
+    }
+
+    return { parkingSlot, layout: this.getParkingLayout() };
   }
 
   /**
@@ -153,7 +223,23 @@ class Parking {
    * Returns a position that is consistent for the same ticket ID
    */
   getCarPosition(ticketId) {
-    const ticket = this.tickets.get(ticketId);
+    const normalizedTicketId = typeof ticketId === 'string' ? ticketId.trim().toUpperCase() : '';
+    const savedParkingSlot = this.parkingReservations.get(normalizedTicketId);
+    const ticket = this.tickets.get(normalizedTicketId);
+
+    // A user-selected slot always takes precedence over the demo/hash fallback.
+    if (savedParkingSlot) {
+      const [cluster] = savedParkingSlot.split('.');
+      return {
+        floor: 'B2',
+        zone: cluster.charAt(0),
+        cluster,
+        slot: savedParkingSlot,
+        licensePlate: ticket ? this.cars.get(ticket.carId)?.licensePlate || 'N/A' : 'N/A',
+        entryTime: ticket ? new Date(ticket.entryTime).toLocaleTimeString('vi-VN') : 'N/A'
+      };
+    }
+
     if (!ticket) {
       // If ticket not found, generate a position based on ticket ID for demo
       const hash = ticketId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -169,6 +255,20 @@ class Parking {
         slot: `${zone}${cluster}.${slot}`,
         licensePlate: 'N/A',
         entryTime: new Date().toLocaleTimeString('vi-VN')
+      };
+    }
+
+    // Tickets with a recorded B2 slot keep their exact selected location.
+    const savedTicketSlot = typeof ticket.slot === 'string' ? ticket.slot.match(/^([A-D]\d)\.(\d{1,2})$/) : null;
+    if (savedTicketSlot) {
+      const cluster = savedTicketSlot[1];
+      return {
+        floor: ticket.floor || 'B2',
+        zone: cluster.charAt(0),
+        cluster,
+        slot: ticket.slot,
+        licensePlate: this.cars.get(ticket.carId)?.licensePlate || 'N/A',
+        entryTime: new Date(ticket.entryTime).toLocaleTimeString('vi-VN')
       };
     }
 

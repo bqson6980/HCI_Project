@@ -11,6 +11,19 @@ const api: AxiosInstance = axios.create({
 });
 
 export const parkingAPI = {
+  // B2 parking layout used by the position-saving screen
+  getParkingLayout: async (): Promise<any> => {
+    const response = await api.get<ApiResponse<any>>('/parking-layout');
+    if (response.data.success && response.data.data) return response.data.data;
+    throw new Error(response.data.error || 'Failed to fetch parking layout');
+  },
+
+  reserveParkingSlot: async (data: { zoneId: string; clusterId: string; slotNumber: number; ticketId?: string }): Promise<any> => {
+    const response = await api.post<ApiResponse<any>>('/parking-layout/reserve', data);
+    if (response.data.success && response.data.data) return response.data.data;
+    throw new Error(response.data.error || 'Failed to reserve parking slot');
+  },
+
   // Floors
   getFloors: async (): Promise<Floor[]> => {
     const response = await api.get<ApiResponse<Floor[]>>('/floors');
