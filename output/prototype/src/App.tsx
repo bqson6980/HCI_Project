@@ -252,68 +252,68 @@ type ZoneData = {
 
 const INITIAL_ZONES: ZoneData[] = [
   {
-   id: 'A',
-   name: 'A',
-   blocks: [
-     [
-       { id: 'A-1-1', status: 'available', occupied: 5, total: 20 },
-       { id: 'A-1-2', status: 'available', occupied: 5, total: 20 },
-       { id: 'A-1-3', status: 'full', occupied: 20, total: 20 },
-     ],
-     [
-       { id: 'A-2-1', status: 'available', occupied: 5, total: 20 },
-       { id: 'A-2-2', status: 'full', occupied: 20, total: 20 },
-       { id: 'A-2-3', status: 'available', occupied: 5, total: 20 },
-     ],
-   ],
+    id: 'A',
+    name: 'A',
+    blocks: [
+      [
+        { id: 'A-1-1', status: 'available', occupied: 5, total: 20 },
+        { id: 'A-1-2', status: 'available', occupied: 5, total: 20 },
+        { id: 'A-1-3', status: 'full', occupied: 20, total: 20 },
+      ],
+      [
+        { id: 'A-2-1', status: 'available', occupied: 5, total: 20 },
+        { id: 'A-2-2', status: 'full', occupied: 20, total: 20 },
+        { id: 'A-2-3', status: 'available', occupied: 5, total: 20 },
+      ],
+    ],
   },
   {
-   id: 'B',
-   name: 'B',
-   blocks: [
-     [
-       { id: 'B-1-1', status: 'available', occupied: 5, total: 20 },
-       { id: 'B-1-2', status: 'available', occupied: 5, total: 20 },
-       { id: 'B-1-3', status: 'full', occupied: 20, total: 20 },
-     ],
-     [
-       { id: 'B-2-1', status: 'available', occupied: 5, total: 20 },
-       { id: 'B-2-2', status: 'full', occupied: 20, total: 20 },
-       { id: 'B-2-3', status: 'available', occupied: 5, total: 20 },
-     ],
-   ],
+    id: 'B',
+    name: 'B',
+    blocks: [
+      [
+        { id: 'B-1-1', status: 'available', occupied: 5, total: 20 },
+        { id: 'B-1-2', status: 'available', occupied: 5, total: 20 },
+        { id: 'B-1-3', status: 'full', occupied: 20, total: 20 },
+      ],
+      [
+        { id: 'B-2-1', status: 'available', occupied: 5, total: 20 },
+        { id: 'B-2-2', status: 'full', occupied: 20, total: 20 },
+        { id: 'B-2-3', status: 'available', occupied: 5, total: 20 },
+      ],
+    ],
   },
   {
-   id: 'C',
-   name: 'C',
-   blocks: [
-     [
-       { id: 'C-1-1', status: 'full', occupied: 20, total: 20 },
-       { id: 'C-1-2', status: 'available', occupied: 5, total: 20 },
-       { id: 'C-1-3', status: 'available', occupied: 5, total: 20 },
-     ],
-     [
-       { id: 'C-2-1', status: 'available', occupied: 5, total: 20 },
-       { id: 'C-2-2', status: 'full', occupied: 20, total: 20 },
-       { id: 'C-2-3', status: 'full', occupied: 20, total: 20 },
-     ],
-   ],
+    id: 'C',
+    name: 'C',
+    blocks: [
+      [
+        { id: 'C-1-1', status: 'full', occupied: 20, total: 20 },
+        { id: 'C-1-2', status: 'available', occupied: 5, total: 20 },
+        { id: 'C-1-3', status: 'available', occupied: 5, total: 20 },
+      ],
+      [
+        { id: 'C-2-1', status: 'available', occupied: 5, total: 20 },
+        { id: 'C-2-2', status: 'full', occupied: 20, total: 20 },
+        { id: 'C-2-3', status: 'full', occupied: 20, total: 20 },
+      ],
+    ],
   },
   {
-   id: 'D',
-   name: 'D',
-   blocks: [
-     [
-       { id: 'D-1-1', status: 'available', occupied: 5, total: 20 },
-       { id: 'D-1-2', status: 'full', occupied: 20, total: 20 },
-       { id: 'D-1-3', status: 'full', occupied: 20, total: 20 },
-     ],
-     [
-       { id: 'D-2-1', status: 'available', occupied: 5, total: 20 },
-       { id: 'D-2-2', status: 'full', occupied: 20, total: 20 },
-       { id: 'D-2-3', status: 'available', occupied: 5, total: 20 },
-     ],
-   ],
+    id: 'D',
+    name: 'D',
+    blocks: [
+      [
+        { id: 'D-1-1', status: 'available', occupied: 5, total: 20 },
+        { id: 'D-1-2', status: 'full', occupied: 20, total: 20 },
+        { id: 'D-1-3', status: 'full', occupied: 20, total: 20 },
+      ],
+      [
+        { id: 'D-2-1', status: 'available', occupied: 5, total: 20 },
+        { id: 'D-2-2', status: 'full', occupied: 20, total: 20 },
+        { id: 'D-2-3', status: 'available', occupied: 5, total: 20 },
+      ],
+    ],
   },
 ]
 
@@ -327,43 +327,42 @@ function ZoneCard({
   onSelect: (zoneId: string, row: number, col: number) => void
 }) {
   return (
-   <div className="rounded-3xl border-2 border-slate-300 bg-white p-5 shadow-sm">
-     <h3 className="mb-4 text-center text-3xl font-black text-slate-900">{zone.name}</h3>
-     <div className="grid gap-3">
-       {zone.blocks.map((row, rIdx) => (
-         <div key={`${zone.id}-row-${rIdx}`} className="grid grid-cols-3 gap-3">
-           {row.map((block, cIdx) => {
-             const isSelected =
-               selectedBlock?.zoneId === zone.id && selectedBlock.row === rIdx && selectedBlock.col === cIdx
+    <div className="rounded-3xl border-2 border-slate-300 bg-white p-5 shadow-sm">
+      <h3 className="mb-4 text-center text-3xl font-black text-slate-900">{zone.name}</h3>
+      <div className="grid gap-3">
+        {zone.blocks.map((row, rIdx) => (
+          <div key={`${zone.id}-row-${rIdx}`} className="grid grid-cols-3 gap-3">
+            {row.map((block, cIdx) => {
+              const isSelected =
+                selectedBlock?.zoneId === zone.id && selectedBlock.row === rIdx && selectedBlock.col === cIdx
 
-             if (block.status === 'full') {
-               return (
-                 <div
-                   key={block.id}
-                   className="flex h-16 items-center justify-center rounded-2xl bg-rose-500 shadow-sm transition hover:opacity-90 sm:h-20"
-                   title="Khu vực đã đầy"
-                 />
-               )
-             }
+              if (block.status === 'full') {
+                return (
+                  <div
+                    key={block.id}
+                    className="flex h-16 items-center justify-center rounded-2xl bg-rose-500 shadow-sm transition hover:opacity-90 sm:h-20"
+                    title="Khu vực đã đầy"
+                  />
+                )
+              }
 
-             return (
-               <button
-                 key={block.id}
-                 type="button"
-                 onClick={() => onSelect(zone.id, rIdx, cIdx)}
-                 className={`flex h-16 items-center justify-center rounded-2xl bg-emerald-500 text-lg font-extrabold text-white shadow-sm transition hover:opacity-90 sm:h-20 sm:text-xl ${
-                   isSelected ? 'ring-4 ring-emerald-200 ring-offset-2' : ''
-                 }`}
-                 title={`Chọn chỗ đỗ: ${block.occupied}/${block.total}`}
-               >
-                 {block.occupied}/{block.total}
-               </button>
-             )
-           })}
-         </div>
-       ))}
-     </div>
-   </div>
+              return (
+                <button
+                  key={block.id}
+                  type="button"
+                  onClick={() => onSelect(zone.id, rIdx, cIdx)}
+                  className={`flex h-16 items-center justify-center rounded-2xl bg-emerald-500 text-lg font-extrabold text-white shadow-sm transition hover:opacity-90 sm:h-20 sm:text-xl ${isSelected ? 'ring-4 ring-emerald-200 ring-offset-2' : ''
+                    }`}
+                  title={`Chọn chỗ đỗ: ${block.occupied}/${block.total}`}
+                >
+                  {block.occupied}/{block.total}
+                </button>
+              )
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -375,166 +374,165 @@ function FloorMapScreen() {
 
   const activeZone = zones.find((zone) => zone.id === selectedBlock?.zoneId)
   const activeBlock =
-   selectedBlock && activeZone
-     ? activeZone.blocks[selectedBlock.row]?.[selectedBlock.col] ?? null
-     : null
+    selectedBlock && activeZone
+      ? activeZone.blocks[selectedBlock.row]?.[selectedBlock.col] ?? null
+      : null
   const activeBlockKey = selectedBlock ? `${selectedBlock.zoneId}:${selectedBlock.row}:${selectedBlock.col}` : ''
   const alreadyReservedSlots = activeBlockKey ? reservedSlots[activeBlockKey] ?? [] : []
 
   const handleSelectBlock = (zoneId: string, row: number, col: number) => {
-   const zone = zones.find((item) => item.id === zoneId)
-   const block = zone?.blocks[row]?.[col]
+    const zone = zones.find((item) => item.id === zoneId)
+    const block = zone?.blocks[row]?.[col]
 
-   if (!zone || !block || block.status === 'full') return
+    if (!zone || !block || block.status === 'full') return
 
-   setSelectedBlock({ zoneId, row, col })
-   setSelectedSlot(null)
+    setSelectedBlock({ zoneId, row, col })
+    setSelectedSlot(null)
   }
 
   const handleConfirmParking = () => {
-   if (!selectedBlock || !activeBlock || selectedSlot === null || activeBlock.status === 'full') return
+    if (!selectedBlock || !activeBlock || selectedSlot === null || activeBlock.status === 'full') return
 
-   const nextOccupied = Math.min(activeBlock.occupied + 1, activeBlock.total)
+    const nextOccupied = Math.min(activeBlock.occupied + 1, activeBlock.total)
 
-   setZones((currentZones) =>
-     currentZones.map((zone) => {
-       if (zone.id !== selectedBlock.zoneId) return zone
+    setZones((currentZones) =>
+      currentZones.map((zone) => {
+        if (zone.id !== selectedBlock.zoneId) return zone
 
-       return {
-         ...zone,
-         blocks: zone.blocks.map((row, rowIndex) =>
-           row.map((block, colIndex) => {
-             if (rowIndex !== selectedBlock.row || colIndex !== selectedBlock.col) return block
+        return {
+          ...zone,
+          blocks: zone.blocks.map((row, rowIndex) =>
+            row.map((block, colIndex) => {
+              if (rowIndex !== selectedBlock.row || colIndex !== selectedBlock.col) return block
 
-             return {
-               ...block,
-               occupied: nextOccupied,
-               status: nextOccupied >= block.total ? 'full' : 'available',
-             }
-           }),
-         ),
-       }
-     }),
-   )
+              return {
+                ...block,
+                occupied: nextOccupied,
+                status: nextOccupied >= block.total ? 'full' : 'available',
+              }
+            }),
+          ),
+        }
+      }),
+    )
 
-   setReservedSlots((current) => ({
-     ...current,
-     [activeBlockKey]: [...new Set([...(current[activeBlockKey] ?? []), selectedSlot])],
-   }))
+    setReservedSlots((current) => ({
+      ...current,
+      [activeBlockKey]: [...new Set([...(current[activeBlockKey] ?? []), selectedSlot])],
+    }))
 
-   setSelectedSlot(null)
-   setSelectedBlock(null)
+    setSelectedSlot(null)
+    setSelectedBlock(null)
   }
 
   return (
-   <ScreenFrame title="Sơ đồ chi tiết tầng B2">
-     <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-md">
-       <div className="mb-6 text-center">
-         <h2 className="text-3xl font-black tracking-tight text-slate-900 sm:text-4xl" style={{ fontFamily: '"Space Grotesk", sans-serif' }}>
-           TẦNG B2
-         </h2>
-         <p className="mt-1 text-xs font-medium text-slate-500">Sơ đồ tổng quan phân khu A - B - C - D</p>
-       </div>
+    <ScreenFrame title="Sơ đồ chi tiết tầng B2">
+      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-md">
+        <div className="mb-6 text-center">
+          <h2 className="text-3xl font-black tracking-tight text-slate-900 sm:text-4xl" style={{ fontFamily: '"Space Grotesk", sans-serif' }}>
+            TẦNG B2
+          </h2>
+          <p className="mt-1 text-xs font-medium text-slate-500">Sơ đồ tổng quan phân khu A - B - C - D</p>
+        </div>
 
-       <div className="mx-auto grid max-w-4xl gap-6 md:grid-cols-2">
-         {zones.map((zone) => (
-           <ZoneCard
-             key={zone.id}
-             zone={zone}
-             selectedBlock={selectedBlock}
-             onSelect={handleSelectBlock}
-           />
-         ))}
-       </div>
+        <div className="mx-auto grid max-w-4xl gap-6 md:grid-cols-2">
+          {zones.map((zone) => (
+            <ZoneCard
+              key={zone.id}
+              zone={zone}
+              selectedBlock={selectedBlock}
+              onSelect={handleSelectBlock}
+            />
+          ))}
+        </div>
 
-       {activeBlock && selectedBlock && (
-         <div className="mt-8 rounded-3xl border border-slate-200 bg-slate-50 p-5">
-           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-             <div>
-               <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Chọn vị trí đỗ</p>
-               <h3 className="text-xl font-extrabold text-slate-900">
-                 Khu {selectedBlock.zoneId} • Cụm {selectedBlock.row + 1}-{selectedBlock.col + 1}
-               </h3>
-             </div>
-             <button
-               type="button"
-               onClick={() => {
-                 setSelectedBlock(null)
-                 setSelectedSlot(null)
-               }}
-               className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100"
-             >
-               Đóng
-             </button>
-           </div>
+        {activeBlock && selectedBlock && (
+          <div className="mt-8 rounded-3xl border border-slate-200 bg-slate-50 p-5">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Chọn vị trí đỗ</p>
+                <h3 className="text-xl font-extrabold text-slate-900">
+                  Khu {selectedBlock.zoneId} • Cụm {selectedBlock.row + 1}-{selectedBlock.col + 1}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedBlock(null)
+                  setSelectedSlot(null)
+                }}
+                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100"
+              >
+                Đóng
+              </button>
+            </div>
 
-           <div className="grid grid-cols-5 gap-2 rounded-2xl border border-slate-200 bg-white p-3">
-             {Array.from({ length: activeBlock.total }, (_, index) => {
-               const slotNumber = index + 1
-               const hasOccupied = index < activeBlock.occupied
-               const isReserved = alreadyReservedSlots.includes(slotNumber)
-               const isSelected = selectedSlot === slotNumber
-               const disabled = hasOccupied || isReserved
+            <div className="grid grid-cols-5 gap-2 rounded-2xl border border-slate-200 bg-white p-3">
+              {Array.from({ length: activeBlock.total }, (_, index) => {
+                const slotNumber = index + 1
+                const hasOccupied = index < activeBlock.occupied
+                const isReserved = alreadyReservedSlots.includes(slotNumber)
+                const isSelected = selectedSlot === slotNumber
+                const disabled = hasOccupied || isReserved
 
-               return (
-                 <button
-                   key={`${activeBlock.id}-slot-${slotNumber}`}
-                   type="button"
-                   disabled={disabled}
-                   onClick={() => setSelectedSlot(slotNumber)}
-                   className={`flex h-10 items-center justify-center rounded-lg border text-[11px] font-bold transition ${
-                     hasOccupied || isReserved
-                       ? 'border-rose-300 bg-rose-500 text-white'
-                       : isSelected
-                         ? 'border-emerald-300 bg-emerald-500 text-white shadow-md'
-                         : 'border-slate-200 bg-slate-100 text-slate-700 hover:border-emerald-300 hover:bg-emerald-50'
-                   } ${disabled ? 'cursor-not-allowed' : ''}`}
-                   title={disabled ? 'Ô này đã được sử dụng' : `Chọn ô ${slotNumber}`}
-                 >
-                   {slotNumber}
-                 </button>
-               )
-             })}
-           </div>
+                return (
+                  <button
+                    key={`${activeBlock.id}-slot-${slotNumber}`}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => setSelectedSlot(slotNumber)}
+                    className={`flex h-10 items-center justify-center rounded-lg border text-[11px] font-bold transition ${hasOccupied || isReserved
+                      ? 'border-rose-300 bg-rose-500 text-white'
+                      : isSelected
+                        ? 'border-emerald-300 bg-emerald-500 text-white shadow-md'
+                        : 'border-slate-200 bg-slate-100 text-slate-700 hover:border-emerald-300 hover:bg-emerald-50'
+                      } ${disabled ? 'cursor-not-allowed' : ''}`}
+                    title={disabled ? 'Ô này đã được sử dụng' : `Chọn ô ${slotNumber}`}
+                  >
+                    {slotNumber}
+                  </button>
+                )
+              })}
+            </div>
 
-           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
-             <p className="text-sm font-semibold text-slate-700">
-               {selectedSlot ? `Ô đỗ đã chọn: ${selectedSlot}` : 'Vui lòng chọn ô đỗ còn trống'}
-             </p>
-             <button
-               type="button"
-               onClick={handleConfirmParking}
-               disabled={selectedSlot === null}
-               className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-extrabold text-white shadow-md transition enabled:hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-             >
-               Xác nhận đỗ xe
-             </button>
-           </div>
-         </div>
-       )}
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
+              <p className="text-sm font-semibold text-slate-700">
+                {selectedSlot ? `Ô đỗ đã chọn: ${selectedSlot}` : 'Vui lòng chọn ô đỗ còn trống'}
+              </p>
+              <button
+                type="button"
+                onClick={handleConfirmParking}
+                disabled={selectedSlot === null}
+                className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-extrabold text-white shadow-md transition enabled:hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                Xác nhận đỗ xe
+              </button>
+            </div>
+          </div>
+        )}
 
-       <div className="mt-8 flex flex-col items-center justify-center gap-1.5 pt-4">
-         <div className="flex items-center gap-2">
-           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 text-2xl text-white shadow-md animate-bounce">
-             ⬆
-           </span>
-           <span className="text-2xl">📍</span>
-         </div>
-         <span className="rounded-full bg-slate-900 px-4 py-1.5 text-xs font-black uppercase tracking-wider text-white shadow-sm">
-           You are here! (Vị trí của bạn)
-         </span>
-       </div>
+        <div className="mt-8 flex flex-col items-center justify-center gap-1.5 pt-4">
+          <div className="flex items-center gap-2">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 text-2xl text-white shadow-md animate-bounce">
+              ⬆
+            </span>
+            <span className="text-2xl">📍</span>
+          </div>
+          <span className="rounded-full bg-slate-900 px-4 py-1.5 text-xs font-black uppercase tracking-wider text-white shadow-sm">
+            You are here! (Vị trí của bạn)
+          </span>
+        </div>
 
-       <div className="mt-6 flex flex-wrap items-center justify-center gap-6 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-semibold text-slate-700">
-         <span className="flex items-center gap-2">
-           <span className="h-4 w-4 rounded-md bg-emerald-500" /> Còn trống (hiện số chỗ / tổng)
-         </span>
-         <span className="flex items-center gap-2">
-           <span className="h-4 w-4 rounded-md bg-rose-500" /> Đã đầy (Occupied)
-         </span>
-       </div>
-     </div>
-   </ScreenFrame>
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-6 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-semibold text-slate-700">
+          <span className="flex items-center gap-2">
+            <span className="h-4 w-4 rounded-md bg-emerald-500" /> Còn trống (hiện số chỗ / tổng)
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="h-4 w-4 rounded-md bg-rose-500" /> Đã đầy (Occupied)
+          </span>
+        </div>
+      </div>
+    </ScreenFrame>
   )
 }
 
@@ -630,9 +628,8 @@ function CheckPositionScreen() {
                   return (
                     <div
                       key={spotNum}
-                      className={`flex h-10 items-center justify-center rounded-lg text-xs font-bold ${
-                        isOccupied ? 'bg-rose-100 text-rose-700 border border-rose-300' : 'bg-slate-100 text-slate-600 border border-slate-200'
-                      }`}
+                      className={`flex h-10 items-center justify-center rounded-lg text-xs font-bold ${isOccupied ? 'bg-rose-100 text-rose-700 border border-rose-300' : 'bg-slate-100 text-slate-600 border border-slate-200'
+                        }`}
                     >
                       {spotNum}
                     </div>
@@ -694,13 +691,12 @@ function PaymentScreen() {
           return (
             <div
               key={sId}
-              className={`rounded-xl py-2.5 transition ${
-                isCurrent
-                  ? 'bg-emerald-600 text-white shadow'
-                  : isPassed
+              className={`rounded-xl py-2.5 transition ${isCurrent
+                ? 'bg-emerald-600 text-white shadow'
+                : isPassed
                   ? 'bg-emerald-100 text-emerald-900'
                   : 'text-slate-400'
-              }`}
+                }`}
             >
               {label}
             </div>
@@ -778,18 +774,16 @@ function PaymentScreen() {
                   <button
                     type="button"
                     onClick={() => setMethod('qr')}
-                    className={`flex-1 rounded-lg py-2.5 transition ${
-                      method === 'qr' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
-                    }`}
+                    className={`flex-1 rounded-lg py-2.5 transition ${method === 'qr' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                      }`}
                   >
                     📱 Quét mã QR
                   </button>
                   <button
                     type="button"
                     onClick={() => setMethod('card')}
-                    className={`flex-1 rounded-lg py-2.5 transition ${
-                      method === 'card' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
-                    }`}
+                    className={`flex-1 rounded-lg py-2.5 transition ${method === 'card' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                      }`}
                   >
                     💳 Chạm thẻ POS
                   </button>
@@ -910,11 +904,10 @@ export default function App() {
                 key={s.id}
                 type="button"
                 onClick={() => setActiveScreen(s.id)}
-                className={`min-w-fit rounded-xl px-3.5 py-2.5 text-left transition ${
-                  active
-                    ? 'bg-emerald-600 text-white shadow-md'
-                    : 'bg-white text-slate-700 hover:bg-emerald-50 hover:text-emerald-900 border border-slate-200'
-                }`}
+                className={`min-w-fit rounded-xl px-3.5 py-2.5 text-left transition ${active
+                  ? 'bg-emerald-600 text-white shadow-md'
+                  : 'bg-white text-slate-700 hover:bg-emerald-50 hover:text-emerald-900 border border-slate-200'
+                  }`}
               >
                 <p className="text-xs font-bold">{s.label}</p>
                 <p className={`text-[10px] ${active ? 'text-emerald-100' : 'text-slate-400'}`}>{s.sub}</p>
