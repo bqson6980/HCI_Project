@@ -41,6 +41,16 @@ body {
   margin-bottom: 2px;
 }
 
+.persona-portrait {
+  display: block;
+  width: 76px;
+  height: 76px;
+  margin-bottom: 8px;
+  border: 1.5px solid #000000;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
 h2 {
   font-size: 15px;
   font-weight: bold;
